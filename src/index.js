@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const http = require('http');
 const { Client, Events, GatewayIntentBits } = require('discord.js');
 const { startTwitchWatcher } = require('./twitch-alerts');
 
@@ -118,9 +119,21 @@ process.on('uncaughtException', (error) => {
   console.error('Exception non gérée :', error);
 });
 
-client.login(token).catch((error) => {
-  // On logge le type d'erreur, jamais le token lui-même.git add .
+// Serveur HTTP minimal : Render (free tier) exige un port ouvert pour
+// considérer le service "actif", et un outil comme UptimeRobot peut pinguer
+// cette route toutes les X minutes pour empêcher la mise en veille automatique.
+const PORT = process.env.PORT || 3000;
+http
+  .createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Les Cacahuètes bot is alive 🥜');
+  })
+  .listen(PORT, () => {
+    console.log(`Serveur keep-alive en écoute sur le port ${PORT}.`);
+  });
 
+client.login(token).catch((error) => {
+  // On logge le type d'erreur, jamais le token lui-même.
   console.error(`Échec de connexion à Discord : ${error.message}`);
   process.exit(1);
 });

@@ -119,7 +119,8 @@ process.on('uncaughtException', (error) => {
 });
 
 client.login(token).catch((error) => {
-  // On logge le type d'erreur, jamais le token lui-même.
+  // On logge le type d'erreur, jamais le token lui-même.git add .
+
   console.error(`Échec de connexion à Discord : ${error.message}`);
   process.exit(1);
 });

@@ -14,7 +14,10 @@ const commands = [
     .setDescription('Répond avec la latence du bot.'),
   new SlashCommandBuilder()
     .setName('hello')
-    .setDescription('Le bot te salue.')
+    .setDescription('Le bot te salue.'),
+  new SlashCommandBuilder()
+    .setName('partycode')
+    .setDescription('Partage un code de groupe Valorant avec un joli formulaire.')
 ].map((command) => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(token);

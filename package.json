@@ -1,0 +1,19 @@
+{
+  "name": "les-cacahuetes-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord construit avec discord.js",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "keywords": ["discord", "discordjs", "bot"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  }
+}

@@ -328,8 +328,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
+      // Comparaison normalisée : les accents peuvent être encodés différemment
+      // (NFC vs NFD) entre ce fichier et le nom du rôle tel que Discord le
+      // renvoie, ce qui fait échouer un === strict sans que rien ne le signale.
+      const normalize = (value) => value.normalize('NFC').trim().toLowerCase();
       const staffRoles = TICKET_STAFF_ROLE_NAMES
-        .map((name) => guild.roles.cache.find((r) => r.name === name))
+        .map((name) => guild.roles.cache.find((r) => normalize(r.name) === normalize(name)))
         .filter(Boolean);
 
       if (staffRoles.length === 0) {
@@ -389,6 +393,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         summaryEmbed.addFields({ name: 'Disponibilités', value: availability });
       }
 
+      const claimButton = new ButtonBuilder()
+        .setCustomId('claim_ticket')
+        .setLabel('🙋 Prise en charge')
+        .setStyle(ButtonStyle.Primary);
+
       const closeButton = new ButtonBuilder()
         .setCustomId('close_ticket')
         .setLabel('🔒 Fermer le ticket')
@@ -399,7 +408,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await ticketChannel.send({
         content: `${interaction.user} ${staffMentions}`.trim(),
         embeds: [summaryEmbed],
-        components: [new ActionRowBuilder().addComponents(closeButton)]
+        components: [new ActionRowBuilder().addComponents(claimButton, closeButton)]
       });
 
       await interaction.editReply(`Ticket créé : ${ticketChannel}`);
@@ -408,6 +417,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.editReply("Impossible de créer ton ticket, désolé 😿");
     }
 
+    return;
+  }
+
+  if (interaction.isButton() && interaction.customId === 'claim_ticket') {
+    const claimedButton = new ButtonBuilder()
+      .setCustomId('claim_ticket')
+      .setLabel(`Pris en charge par ${interaction.user.username}`)
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(true);
+
+    const closeButton = new ButtonBuilder()
+      .setCustomId('close_ticket')
+      .setLabel('🔒 Fermer le ticket')
+      .setStyle(ButtonStyle.Danger);
+
+    await interaction.update({
+      components: [new ActionRowBuilder().addComponents(claimedButton, closeButton)]
+    });
+
+    await interaction.followUp(`🙋 Ticket pris en charge par ${interaction.user} !`);
     return;
   }
 

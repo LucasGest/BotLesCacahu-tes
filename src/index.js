@@ -42,6 +42,11 @@ function findStaffRoles(guild) {
     .filter(Boolean);
 }
 
+function isTicketStaff(member) {
+  const staffRoleIds = new Set(findStaffRoles(member.guild).map((role) => role.id));
+  return member.roles.cache.some((role) => staffRoleIds.has(role.id));
+}
+
 async function getOrCreateCategory(guild, name) {
   let category = guild.channels.cache.find(
     (channel) => channel.type === ChannelType.GuildCategory && channel.name === name
@@ -467,6 +472,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.isButton() && interaction.customId === 'claim_ticket') {
+    if (!isTicketStaff(interaction.member)) {
+      await interaction.reply({
+        content: "Seul le staff peut prendre en charge un ticket.",
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
     const claimedButton = new ButtonBuilder()
       .setCustomId('claim_ticket')
       .setLabel(`Pris en charge par ${interaction.user.username}`)
@@ -487,6 +500,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.isButton() && interaction.customId === 'close_ticket') {
+    if (!isTicketStaff(interaction.member)) {
+      await interaction.reply({
+        content: "Seul le staff peut fermer un ticket.",
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
     await interaction.reply('🔒 Fermeture et sauvegarde du ticket en cours...');
 
     try {

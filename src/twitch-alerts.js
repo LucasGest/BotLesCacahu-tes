@@ -33,7 +33,9 @@ async function getStream(clientId, accessToken, username) {
   );
 
   if (!response.ok) {
-    throw new Error(`Twitch stream error (${response.status})`);
+    const error = new Error(`Twitch stream error (${response.status})`);
+    error.status = response.status;
+    throw error;
   }
 
   const data = await response.json();
@@ -81,6 +83,12 @@ function startTwitchWatcher(client) {
       );
       announcedStreamId = stream.id;
     } catch (error) {
+      if (error.status === 401) {
+        // Token expiré ou révoqué : on le jette pour en redemander un neuf au
+        // prochain cycle, sinon chaque vérification échouerait indéfiniment.
+        accessToken = undefined;
+      }
+
       console.error(`Erreur pendant la vérification du live Twitch : ${error.message}`);
     }
   };

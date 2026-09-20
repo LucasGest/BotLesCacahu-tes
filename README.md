@@ -34,6 +34,36 @@ Dans **Bot > Privileged Gateway Intents**, active **Server Members Intent** pour
 
 Crée une application dans la [Twitch Developer Console](https://dev.twitch.tv/console/apps), avec `http://localhost` comme URL de redirection. Copie son **Client ID** et son **Client Secret** dans `.env`. Le bot vérifie la chaîne toutes les 60 secondes et publie une alerte lorsqu'un nouveau live commence.
 
+## Système de tickets de recrutement
+
+Le bot gère un système de candidatures Valorant par tickets :
+
+1. Un admin lance `/ticket-setup` dans le salon d'annonce du recrutement (ex: `#recrutement`). Ça poste un message avec un bouton **🎫 Ouvrir un ticket**.
+2. Un joueur clique dessus, remplit un formulaire (pseudo Valorant, rang, rôle(s) joué(s), disponibilités).
+3. Un salon privé `ticket-<pseudo>` est créé sous la catégorie **🎫 Tickets**, visible seulement par le candidat et le staff (rôles ci-dessous). L'embed de candidature y est posté avec deux boutons, réservés au staff :
+   - **🙋 Prise en charge** : marque le ticket comme suivi par un recruteur.
+   - **🔒 Fermer le ticket** : sauvegarde l'historique du salon (fichier texte) dans le salon d'archives, puis supprime le salon.
+
+Le staff autorisé et le salon d'archives sont actuellement codés en dur dans [src/index.js](src/index.js) plutôt que dans `.env` :
+
+- `TICKET_STAFF_ROLE_NAMES` : les rôles Discord ayant accès aux tickets (comparés par nom, insensible aux accents/majuscules).
+- `TICKET_CATEGORY_NAME` : la catégorie où sont créés les salons de tickets (créée automatiquement si absente).
+- `TICKET_ARCHIVE_CHANNEL_ID` : l'ID du salon où sont envoyés les transcripts des tickets fermés.
+
+Modifie ces constantes directement dans le code si tes noms de rôles ou ton salon d'archives changent.
+
+## Commandes disponibles
+
+| Commande | Description |
+| --- | --- |
+| `/ping` | Répond avec la latence du bot. |
+| `/hello` | Le bot te salue. |
+| `/help` | Affiche la liste des commandes disponibles. |
+| `/partycode` | Partage un code de groupe Valorant via un formulaire. |
+| `/ticket-setup` | Poste le message d'ouverture de ticket de recrutement (staff uniquement). |
+
+La liste ci-dessus est aussi maintenue dans [src/commands.js](src/commands.js), utilisé à la fois pour déployer les commandes et pour `/help`.
+
 ## Lancer
 
 Déploie les commandes slash sur ton serveur de test :
@@ -48,4 +78,4 @@ Puis démarre le bot :
 npm start
 ```
 
-Dans Discord, utilise `/ping` ou `/hello`. Quand un membre rejoint le serveur, le bot envoie `Bienvenue miaou @user` dans le salon `général` ou `general`.
+Quand un membre rejoint le serveur, le bot envoie `Bienvenue miaou @user` dans le salon `général` ou `general`. Il réagit aussi aux messages contenant "chat", et modère (timeout 30s) les messages qui mentionnent quelqu'un d'autre que l'auteur.

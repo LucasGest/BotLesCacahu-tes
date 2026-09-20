@@ -14,7 +14,8 @@ const {
   ButtonStyle,
   MessageFlags,
   PermissionFlagsBits,
-  ChannelType
+  ChannelType,
+  AttachmentBuilder
 } = require('discord.js');
 const { startTwitchWatcher } = require('./twitch-alerts');
 const COMMANDS = require('./commands');
@@ -28,6 +29,91 @@ const TICKET_STAFF_ROLE_NAMES = [
   'Co-Patron de la Cacahuète'
 ];
 const TICKET_CATEGORY_NAME = '🎫 Tickets';
+const TICKET_ARCHIVE_CHANNEL_NAME = 'tickets-archives';
+
+// Comparaison normalisée : les accents peuvent être encodés différemment
+// (NFC vs NFD) entre ce fichier et le nom du rôle tel que Discord le
+// renvoie, ce qui fait échouer un === strict sans que rien ne le signale.
+const normalizeName = (value) => value.normalize('NFC').trim().toLowerCase();
+
+function findStaffRoles(guild) {
+  return TICKET_STAFF_ROLE_NAMES
+    .map((name) => guild.roles.cache.find((r) => normalizeName(r.name) === normalizeName(name)))
+    .filter(Boolean);
+}
+
+async function getOrCreateCategory(guild, name) {
+  let category = guild.channels.cache.find(
+    (channel) => channel.type === ChannelType.GuildCategory && channel.name === name
+  );
+
+  if (!category) {
+    category = await guild.channels.create({ name, type: ChannelType.GuildCategory });
+  }
+
+  return category;
+}
+
+async function getOrCreateArchiveChannel(guild) {
+  const existing = guild.channels.cache.find(
+    (channel) => channel.type === ChannelType.GuildText && channel.name === TICKET_ARCHIVE_CHANNEL_NAME
+  );
+
+  if (existing) {
+    return existing;
+  }
+
+  const category = await getOrCreateCategory(guild, TICKET_CATEGORY_NAME);
+  const staffRoles = findStaffRoles(guild);
+  const ticketAccess = [
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.ReadMessageHistory
+  ];
+
+  return guild.channels.create({
+    name: TICKET_ARCHIVE_CHANNEL_NAME,
+    type: ChannelType.GuildText,
+    parent: category.id,
+    permissionOverwrites: [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: guild.members.me.id, allow: ticketAccess },
+      ...staffRoles.map((role) => ({ id: role.id, allow: ticketAccess }))
+    ]
+  });
+}
+
+// Récupère l'historique du salon avant sa suppression et le met en forme en
+// texte brut, pour garder une trace des candidatures une fois le ticket fermé.
+async function buildTicketTranscript(channel) {
+  const messages = await channel.messages.fetch({ limit: 100 });
+  const sorted = [...messages.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+  const lines = sorted.map((message) => {
+    const time = new Date(message.createdTimestamp).toLocaleString('fr-FR');
+    const parts = [];
+
+    if (message.content) {
+      parts.push(message.content);
+    }
+
+    for (const embed of message.embeds) {
+      if (embed.title) {
+        parts.push(`[${embed.title}]`);
+      }
+      if (embed.description) {
+        parts.push(embed.description);
+      }
+      for (const field of embed.fields) {
+        parts.push(`${field.name}: ${field.value}`);
+      }
+    }
+
+    return `[${time}] ${message.author.tag}: ${parts.join(' | ') || '(message sans texte)'}`;
+  });
+
+  return lines.join('\n') || '(salon vide)';
+}
 
 // Variables obligatoires : le bot ne démarre pas si l'une d'elles manque,
 // plutôt que de planter plus tard avec une erreur obscure.
@@ -328,13 +414,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // Comparaison normalisée : les accents peuvent être encodés différemment
-      // (NFC vs NFD) entre ce fichier et le nom du rôle tel que Discord le
-      // renvoie, ce qui fait échouer un === strict sans que rien ne le signale.
-      const normalize = (value) => value.normalize('NFC').trim().toLowerCase();
-      const staffRoles = TICKET_STAFF_ROLE_NAMES
-        .map((name) => guild.roles.cache.find((r) => normalize(r.name) === normalize(name)))
-        .filter(Boolean);
+      const staffRoles = findStaffRoles(guild);
 
       if (staffRoles.length === 0) {
         console.warn(
@@ -342,16 +422,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         );
       }
 
-      let category = guild.channels.cache.find(
-        (channel) => channel.type === ChannelType.GuildCategory && channel.name === TICKET_CATEGORY_NAME
-      );
-
-      if (!category) {
-        category = await guild.channels.create({
-          name: TICKET_CATEGORY_NAME,
-          type: ChannelType.GuildCategory
-        });
-      }
+      const category = await getOrCreateCategory(guild, TICKET_CATEGORY_NAME);
 
       const safeName = interaction.user.username
         .toLowerCase()
@@ -441,7 +512,25 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.isButton() && interaction.customId === 'close_ticket') {
-    await interaction.reply('🔒 Ticket fermé, ce salon sera supprimé dans 5 secondes...');
+    await interaction.reply('🔒 Fermeture et sauvegarde du ticket en cours...');
+
+    try {
+      const transcript = await buildTicketTranscript(interaction.channel);
+      const archiveChannel = await getOrCreateArchiveChannel(interaction.guild);
+      const openerId = interaction.channel.topic?.replace('ticket-opener:', '') ?? null;
+      const attachment = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), {
+        name: `${interaction.channel.name}.txt`
+      });
+
+      await archiveChannel.send({
+        content:
+          `📁 Ticket **#${interaction.channel.name}** fermé par ${interaction.user}` +
+          (openerId ? ` (candidat : <@${openerId}>)` : ''),
+        files: [attachment]
+      });
+    } catch (error) {
+      console.error('Impossible de sauvegarder le transcript du ticket :', error.message);
+    }
 
     setTimeout(() => {
       interaction.channel.delete().catch((error) => {

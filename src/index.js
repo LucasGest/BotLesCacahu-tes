@@ -1,6 +1,8 @@
 require('dotenv').config();
 
 const http = require('http');
+const path = require('path');
+const { spawn } = require('child_process');
 const {
   Client,
   Events,
@@ -20,8 +22,58 @@ const {
   AudioPlayerStatus,
   getVoiceConnection
 } = require('@discordjs/voice');
-const playdl = require('play-dl');
 const { startTwitchWatcher } = require('./twitch-alerts');
+
+// yt-dlp est téléchargé par scripts/download-yt-dlp.js (lancé automatiquement
+// via "postinstall"). On l'utilise en sous-processus plutôt qu'une lib Node
+// (play-dl, ytdl-core...) car YouTube bloque désormais ces libs non maintenues ;
+// yt-dlp reçoit des correctifs en continu pour contourner ces blocages.
+const YTDLP_PATH = path.join(
+  __dirname,
+  '..',
+  'bin',
+  process.platform === 'win32' ? 'yt-dlp.exe' : process.platform === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp_linux'
+);
+
+function resolveTrack(query) {
+  return new Promise((resolve, reject) => {
+    const isUrl = /^https?:\/\//i.test(query);
+    const target = isUrl ? query : `ytsearch1:${query}`;
+    const proc = spawn(YTDLP_PATH, ['--dump-json', '--no-playlist', '--no-warnings', target]);
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (chunk) => { stdout += chunk; });
+    proc.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (code !== 0 || !stdout.trim()) {
+        reject(new Error(stderr.trim() || `yt-dlp a quitté avec le code ${code}`));
+        return;
+      }
+
+      try {
+        const data = JSON.parse(stdout.trim().split('\n')[0]);
+        resolve({ url: data.webpage_url, title: data.title });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+function createYtdlpAudioStream(url) {
+  const proc = spawn(YTDLP_PATH, ['-f', 'bestaudio/best', '--no-playlist', '--no-warnings', '-o', '-', url]);
+
+  // On consomme stderr sans le logger en continu (progression du téléchargement)
+  // pour éviter que le buffer ne sature et ne bloque le process.
+  proc.stderr.resume();
+  proc.on('error', (error) => console.error('Erreur du process yt-dlp :', error.message));
+
+  return proc;
+}
 
 // Variables obligatoires : le bot ne démarre pas si l'une d'elles manque,
 // plutôt que de planter plus tard avec une erreur obscure.
@@ -35,21 +87,6 @@ if (missingVars.length > 0) {
 }
 
 const token = process.env.DISCORD_TOKEN;
-
-// Sans ça, YouTube bloque souvent les requêtes venant d'IPs d'hébergeurs cloud
-// (comme Render) avec un message "Sign in to confirm you're not a bot".
-// YOUTUBE_COOKIE est optionnelle : sans elle, /play risque de ne pas fonctionner en ligne.
-if (process.env.YOUTUBE_COOKIE) {
-  playdl.setToken({
-    youtube: {
-      cookie: process.env.YOUTUBE_COOKIE
-    }
-  });
-} else {
-  console.warn(
-    "YOUTUBE_COOKIE n'est pas définie : /play risque d'échouer si YouTube bloque les requêtes du serveur."
-  );
-}
 
 const client = new Client({
   intents: [
@@ -156,18 +193,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.deferReply();
 
       try {
-        // Si ce n'est pas un lien YouTube direct, on cherche et on prend le premier résultat.
-        let url = query;
-        if ((await playdl.validate(query)) !== 'yt_video') {
-          const results = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
-
-          if (results.length === 0) {
-            await interaction.editReply(`Aucun résultat trouvé pour "${query}" 😿`);
-            return;
-          }
-
-          url = results[0].url;
-        }
+        const track = await resolveTrack(query);
 
         const connection = getVoiceConnection(voiceChannel.guild.id)
           ?? joinVoiceChannel({
@@ -176,24 +202,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
             adapterCreator: voiceChannel.guild.voiceAdapterCreator
           });
 
-        const info = await playdl.video_info(url);
-        const stream = await playdl.stream(url);
-        const resource = createAudioResource(stream.stream, { inputType: stream.type });
+        const ytdlpProcess = createYtdlpAudioStream(track.url);
+        const resource = createAudioResource(ytdlpProcess.stdout);
         const player = createAudioPlayer();
 
         player.play(resource);
         connection.subscribe(player);
 
+        const cleanup = () => {
+          if (!ytdlpProcess.killed) {
+            ytdlpProcess.kill();
+          }
+        };
+
         player.once(AudioPlayerStatus.Idle, () => {
+          cleanup();
           connection.destroy();
         });
 
         player.once('error', (error) => {
           console.error(`Erreur du lecteur audio : ${error.message}`);
+          cleanup();
           connection.destroy();
         });
 
-        await interaction.editReply(`🎵 Lecture de **${info.video_details.title}**`);
+        await interaction.editReply(`🎵 Lecture de **${track.title}**`);
       } catch (error) {
         console.error('Erreur complète /play :', error);
         await interaction.editReply("Impossible de lire cette musique, désolé 😿");

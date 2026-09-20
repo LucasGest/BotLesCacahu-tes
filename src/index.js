@@ -127,7 +127,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.commandName === 'play') {
-      const url = interaction.options.getString('lien');
+      const query = interaction.options.getString('recherche');
       const voiceChannel = interaction.member.voice.channel;
 
       if (!voiceChannel) {
@@ -138,18 +138,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      const isValidYoutubeLink = (await playdl.validate(url)) === 'yt_video';
-      if (!isValidYoutubeLink) {
-        await interaction.reply({
-          content: "Donne-moi un lien YouTube valide vers une vidéo (pas une playlist).",
-          ephemeral: true
-        });
-        return;
-      }
-
       await interaction.deferReply();
 
       try {
+        // Si ce n'est pas un lien YouTube direct, on cherche et on prend le premier résultat.
+        let url = query;
+        if ((await playdl.validate(query)) !== 'yt_video') {
+          const results = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
+
+          if (results.length === 0) {
+            await interaction.editReply(`Aucun résultat trouvé pour "${query}" 😿`);
+            return;
+          }
+
+          url = results[0].url;
+        }
+
         const connection = getVoiceConnection(voiceChannel.guild.id)
           ?? joinVoiceChannel({
             channelId: voiceChannel.id,
@@ -177,7 +181,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.editReply(`🎵 Lecture de **${info.video_details.title}**`);
       } catch (error) {
         console.error(`Impossible de lire la vidéo : ${error.message}`);
-        await interaction.editReply("Impossible de lire cette vidéo, désolé 😿");
+        await interaction.editReply("Impossible de lire cette musique, désolé 😿");
       }
 
       return;

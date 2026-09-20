@@ -20,11 +20,11 @@ const commands = [
     .setDescription('Partage un code de groupe Valorant avec un joli formulaire.'),
   new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Fait rejoindre ton vocal au bot et joue une vidéo YouTube.')
+    .setDescription('Fait rejoindre ton vocal au bot et joue une musique.')
     .addStringOption((option) =>
       option
-        .setName('lien')
-        .setDescription('Lien YouTube de la vidéo à jouer')
+        .setName('recherche')
+        .setDescription('Lien YouTube ou nom de la musique à chercher')
         .setRequired(true)
     ),
   new SlashCommandBuilder()

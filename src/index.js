@@ -1,6 +1,8 @@
 require('dotenv').config();
 
 const http = require('http');
+const os = require('os');
+const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const {
@@ -35,11 +37,33 @@ const YTDLP_PATH = path.join(
   process.platform === 'win32' ? 'yt-dlp.exe' : process.platform === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp_linux'
 );
 
+// YouTube bloque plus agressivement les IPs des hébergeurs cloud (Render, AWS...)
+// que les IPs résidentielles ("Sign in to confirm you're not a bot"). YOUTUBE_COOKIES
+// (contenu d'un cookies.txt exporté d'un compte connecté) permet à yt-dlp de
+// s'authentifier et de contourner ce blocage. Optionnelle : sans elle, /play
+// risque d'échouer une fois déployé même s'il fonctionne en local.
+const COOKIES_PATH = (() => {
+  if (!process.env.YOUTUBE_COOKIES) {
+    console.warn(
+      "YOUTUBE_COOKIES n'est pas définie : /play risque d'échouer si YouTube bloque les requêtes du serveur."
+    );
+    return null;
+  }
+
+  const filePath = path.join(os.tmpdir(), 'youtube-cookies.txt');
+  fs.writeFileSync(filePath, process.env.YOUTUBE_COOKIES);
+  return filePath;
+})();
+
+function withCookies(args) {
+  return COOKIES_PATH ? [...args, '--cookies', COOKIES_PATH] : args;
+}
+
 function resolveTrack(query) {
   return new Promise((resolve, reject) => {
     const isUrl = /^https?:\/\//i.test(query);
     const target = isUrl ? query : `ytsearch1:${query}`;
-    const proc = spawn(YTDLP_PATH, ['--dump-json', '--no-playlist', '--no-warnings', target]);
+    const proc = spawn(YTDLP_PATH, withCookies(['--dump-json', '--no-playlist', '--no-warnings', target]));
 
     let stdout = '';
     let stderr = '';
@@ -65,7 +89,10 @@ function resolveTrack(query) {
 }
 
 function createYtdlpAudioStream(url) {
-  const proc = spawn(YTDLP_PATH, ['-f', 'bestaudio/best', '--no-playlist', '--no-warnings', '-o', '-', url]);
+  const proc = spawn(
+    YTDLP_PATH,
+    withCookies(['-f', 'bestaudio/best', '--no-playlist', '--no-warnings', '-o', '-', url])
+  );
 
   // On consomme stderr sans le logger en continu (progression du téléchargement)
   // pour éviter que le buffer ne sature et ne bloque le process.

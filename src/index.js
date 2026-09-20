@@ -29,7 +29,7 @@ const TICKET_STAFF_ROLE_NAMES = [
   'Co-Patron de la Cacahuète'
 ];
 const TICKET_CATEGORY_NAME = '🎫 Tickets';
-const TICKET_ARCHIVE_CHANNEL_NAME = 'tickets-archives';
+const TICKET_ARCHIVE_CHANNEL_ID = '1551289156527988817';
 
 // Comparaison normalisée : les accents peuvent être encodés différemment
 // (NFC vs NFD) entre ce fichier et le nom du rôle tel que Discord le
@@ -54,33 +54,8 @@ async function getOrCreateCategory(guild, name) {
   return category;
 }
 
-async function getOrCreateArchiveChannel(guild) {
-  const existing = guild.channels.cache.find(
-    (channel) => channel.type === ChannelType.GuildText && channel.name === TICKET_ARCHIVE_CHANNEL_NAME
-  );
-
-  if (existing) {
-    return existing;
-  }
-
-  const category = await getOrCreateCategory(guild, TICKET_CATEGORY_NAME);
-  const staffRoles = findStaffRoles(guild);
-  const ticketAccess = [
-    PermissionFlagsBits.ViewChannel,
-    PermissionFlagsBits.SendMessages,
-    PermissionFlagsBits.ReadMessageHistory
-  ];
-
-  return guild.channels.create({
-    name: TICKET_ARCHIVE_CHANNEL_NAME,
-    type: ChannelType.GuildText,
-    parent: category.id,
-    permissionOverwrites: [
-      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-      { id: guild.members.me.id, allow: ticketAccess },
-      ...staffRoles.map((role) => ({ id: role.id, allow: ticketAccess }))
-    ]
-  });
+async function getArchiveChannel(guild) {
+  return guild.channels.cache.get(TICKET_ARCHIVE_CHANNEL_ID) ?? guild.channels.fetch(TICKET_ARCHIVE_CHANNEL_ID);
 }
 
 // Récupère l'historique du salon avant sa suppression et le met en forme en
@@ -516,7 +491,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     try {
       const transcript = await buildTicketTranscript(interaction.channel);
-      const archiveChannel = await getOrCreateArchiveChannel(interaction.guild);
+      const archiveChannel = await getArchiveChannel(interaction.guild);
       const openerId = interaction.channel.topic?.replace('ticket-opener:', '') ?? null;
       const attachment = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), {
         name: `${interaction.channel.name}.txt`

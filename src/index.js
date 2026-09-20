@@ -11,10 +11,18 @@ const {
   ActionRowBuilder,
   EmbedBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  MessageFlags,
+  PermissionFlagsBits,
+  ChannelType
 } = require('discord.js');
 const { startTwitchWatcher } = require('./twitch-alerts');
 const COMMANDS = require('./commands');
+
+// Rôles ayant accès aux salons de tickets, et catégorie où ils sont créés.
+// Résolus par nom (pas par ID) pour rester simples à retoucher sans .env.
+const TICKET_STAFF_ROLE_NAMES = ['Recrutement', 'Staff de la cacahuète'];
+const TICKET_CATEGORY_NAME = '🎫 Tickets';
 
 // Variables obligatoires : le bot ne démarre pas si l'une d'elles manque,
 // plutôt que de planter plus tard avec une erreur obscure.
@@ -126,7 +134,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
           COMMANDS.map(({ name, description }) => `**/${name}** — ${description}`).join('\n')
         );
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    if (interaction.commandName === 'ticket-setup') {
+      const embed = new EmbedBuilder()
+        .setColor(0xff4655)
+        .setTitle('🎮 Recrutement Valorant')
+        .setDescription(
+          "Tu veux rejoindre l'équipe ? Clique sur le bouton ci-dessous pour ouvrir un ticket et candidater."
+        );
+
+      const openButton = new ButtonBuilder()
+        .setCustomId('open_ticket')
+        .setLabel('🎫 Ouvrir un ticket')
+        .setStyle(ButtonStyle.Success);
+
+      await interaction.reply({
+        embeds: [embed],
+        components: [new ActionRowBuilder().addComponents(openButton)]
+      });
       return;
     }
 
@@ -224,8 +252,168 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     await interaction.reply({
       content: `\`${code}\``,
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
+    return;
+  }
+
+  if (interaction.isButton() && interaction.customId === 'open_ticket') {
+    const modal = new ModalBuilder()
+      .setCustomId('ticket_modal')
+      .setTitle('🎮 Candidature recrutement');
+
+    const pseudoInput = new TextInputBuilder()
+      .setCustomId('ticket_pseudo')
+      .setLabel('Pseudo Valorant (+ tag)')
+      .setPlaceholder('Ex: Joueur#EUW1')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const rankInput = new TextInputBuilder()
+      .setCustomId('ticket_rank')
+      .setLabel('Rang actuel')
+      .setPlaceholder('Ex: Diamant 2')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const roleInput = new TextInputBuilder()
+      .setCustomId('ticket_role')
+      .setLabel('Rôle(s) joué(s)')
+      .setPlaceholder('Ex: Duelliste, Initiateur')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const availabilityInput = new TextInputBuilder()
+      .setCustomId('ticket_availability')
+      .setLabel('Disponibilités')
+      .setPlaceholder('Ex: Soirs en semaine, week-ends')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(false);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(pseudoInput),
+      new ActionRowBuilder().addComponents(rankInput),
+      new ActionRowBuilder().addComponents(roleInput),
+      new ActionRowBuilder().addComponents(availabilityInput)
+    );
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  if (interaction.isModalSubmit() && interaction.customId === 'ticket_modal') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+      const pseudo = interaction.fields.getTextInputValue('ticket_pseudo');
+      const rank = interaction.fields.getTextInputValue('ticket_rank');
+      const role = interaction.fields.getTextInputValue('ticket_role');
+      const availability = interaction.fields.getTextInputValue('ticket_availability');
+
+      const { guild } = interaction;
+
+      // Un joueur ne peut avoir qu'un ticket ouvert à la fois : on le retrouve
+      // via le topic du salon plutôt que de stocker un état à part.
+      const existing = guild.channels.cache.find(
+        (channel) => channel.topic === `ticket-opener:${interaction.user.id}`
+      );
+
+      if (existing) {
+        await interaction.editReply(`Tu as déjà un ticket ouvert : ${existing}`);
+        return;
+      }
+
+      const staffRoles = TICKET_STAFF_ROLE_NAMES
+        .map((name) => guild.roles.cache.find((r) => r.name === name))
+        .filter(Boolean);
+
+      if (staffRoles.length === 0) {
+        console.warn(
+          `Aucun des rôles staff (${TICKET_STAFF_ROLE_NAMES.join(', ')}) n'a été trouvé sur ${guild.name}.`
+        );
+      }
+
+      let category = guild.channels.cache.find(
+        (channel) => channel.type === ChannelType.GuildCategory && channel.name === TICKET_CATEGORY_NAME
+      );
+
+      if (!category) {
+        category = await guild.channels.create({
+          name: TICKET_CATEGORY_NAME,
+          type: ChannelType.GuildCategory
+        });
+      }
+
+      const safeName = interaction.user.username
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 80);
+
+      const ticketAccess = [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory
+      ];
+
+      const ticketChannel = await guild.channels.create({
+        name: `ticket-${safeName || interaction.user.id}`,
+        type: ChannelType.GuildText,
+        parent: category.id,
+        topic: `ticket-opener:${interaction.user.id}`,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: interaction.user.id, allow: ticketAccess },
+          { id: client.user.id, allow: ticketAccess },
+          ...staffRoles.map((staffRole) => ({ id: staffRole.id, allow: ticketAccess }))
+        ]
+      });
+
+      const summaryEmbed = new EmbedBuilder()
+        .setColor(0xff4655)
+        .setTitle('🎮 Nouvelle candidature')
+        .addFields(
+          { name: 'Candidat', value: `${interaction.user}`, inline: true },
+          { name: 'Pseudo Valorant', value: pseudo, inline: true },
+          { name: 'Rang', value: rank, inline: true },
+          { name: 'Rôle(s) joué(s)', value: role, inline: true }
+        )
+        .setTimestamp();
+
+      if (availability) {
+        summaryEmbed.addFields({ name: 'Disponibilités', value: availability });
+      }
+
+      const closeButton = new ButtonBuilder()
+        .setCustomId('close_ticket')
+        .setLabel('🔒 Fermer le ticket')
+        .setStyle(ButtonStyle.Danger);
+
+      const staffMentions = staffRoles.map((staffRole) => `<@&${staffRole.id}>`).join(' ');
+
+      await ticketChannel.send({
+        content: `${interaction.user} ${staffMentions}`.trim(),
+        embeds: [summaryEmbed],
+        components: [new ActionRowBuilder().addComponents(closeButton)]
+      });
+
+      await interaction.editReply(`Ticket créé : ${ticketChannel}`);
+    } catch (error) {
+      console.error('Erreur complète /ticket (création) :', error);
+      await interaction.editReply("Impossible de créer ton ticket, désolé 😿");
+    }
+
+    return;
+  }
+
+  if (interaction.isButton() && interaction.customId === 'close_ticket') {
+    await interaction.reply('🔒 Ticket fermé, ce salon sera supprimé dans 5 secondes...');
+
+    setTimeout(() => {
+      interaction.channel.delete().catch((error) => {
+        console.error('Impossible de supprimer le salon de ticket :', error.message);
+      });
+    }, 5000);
   }
 });
 

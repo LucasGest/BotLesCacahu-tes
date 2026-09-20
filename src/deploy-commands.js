@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const { REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const COMMANDS = require('./commands');
 
 const { DISCORD_TOKEN: token, DISCORD_CLIENT_ID: clientId, DISCORD_GUILD_ID: guildId } = process.env;
@@ -9,9 +9,16 @@ if (!token || !clientId || !guildId) {
   throw new Error('DISCORD_TOKEN, DISCORD_CLIENT_ID et DISCORD_GUILD_ID sont requis dans .env.');
 }
 
-const commands = COMMANDS.map(({ name, description }) =>
-  new SlashCommandBuilder().setName(name).setDescription(description).toJSON()
-);
+const commands = COMMANDS.map(({ name, description, adminOnly }) => {
+  const builder = new SlashCommandBuilder().setName(name).setDescription(description);
+
+  if (adminOnly) {
+    // Masque la commande dans le picker Discord pour qui n'a pas la permission.
+    builder.setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels);
+  }
+
+  return builder.toJSON();
+});
 
 const rest = new REST({ version: '10' }).setToken(token);
 

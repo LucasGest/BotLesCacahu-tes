@@ -21,7 +21,12 @@ const COMMANDS = require('./commands');
 
 // Rôles ayant accès aux salons de tickets, et catégorie où ils sont créés.
 // Résolus par nom (pas par ID) pour rester simples à retoucher sans .env.
-const TICKET_STAFF_ROLE_NAMES = ['Recrutement', 'Staff de la cacahuète'];
+const TICKET_STAFF_ROLE_NAMES = [
+  'Recrutement',
+  'Staff de la cacahuète',
+  'Grand Patron de la Cacahuète',
+  'Co-Patron de la Cacahuète'
+];
 const TICKET_CATEGORY_NAME = '🎫 Tickets';
 
 // Variables obligatoires : le bot ne démarre pas si l'une d'elles manque,

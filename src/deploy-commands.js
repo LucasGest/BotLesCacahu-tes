@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
+const COMMANDS = require('./commands');
 
 const { DISCORD_TOKEN: token, DISCORD_CLIENT_ID: clientId, DISCORD_GUILD_ID: guildId } = process.env;
 
@@ -8,17 +9,9 @@ if (!token || !clientId || !guildId) {
   throw new Error('DISCORD_TOKEN, DISCORD_CLIENT_ID et DISCORD_GUILD_ID sont requis dans .env.');
 }
 
-const commands = [
-  new SlashCommandBuilder()
-    .setName('ping')
-    .setDescription('Répond avec la latence du bot.'),
-  new SlashCommandBuilder()
-    .setName('hello')
-    .setDescription('Le bot te salue.'),
-  new SlashCommandBuilder()
-    .setName('partycode')
-    .setDescription('Partage un code de groupe Valorant avec un joli formulaire.')
-].map((command) => command.toJSON());
+const commands = COMMANDS.map(({ name, description }) =>
+  new SlashCommandBuilder().setName(name).setDescription(description).toJSON()
+);
 
 const rest = new REST({ version: '10' }).setToken(token);
 

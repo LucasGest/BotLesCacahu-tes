@@ -14,6 +14,7 @@ const {
   ButtonStyle
 } = require('discord.js');
 const { startTwitchWatcher } = require('./twitch-alerts');
+const COMMANDS = require('./commands');
 
 // Variables obligatoires : le bot ne démarre pas si l'une d'elles manque,
 // plutôt que de planter plus tard avec une erreur obscure.
@@ -114,6 +115,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.commandName === 'hello') {
       await interaction.reply(`Salut ${interaction.user} !`);
+      return;
+    }
+
+    if (interaction.commandName === 'help') {
+      const embed = new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle('📖 Commandes disponibles')
+        .setDescription(
+          COMMANDS.map(({ name, description }) => `**/${name}** — ${description}`).join('\n')
+        );
+
+      await interaction.reply({ embeds: [embed], ephemeral: true });
       return;
     }
 

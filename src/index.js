@@ -1,10 +1,6 @@
 require('dotenv').config();
 
 const http = require('http');
-const os = require('os');
-const fs = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
 const {
   Client,
   Events,
@@ -17,95 +13,7 @@ const {
   ButtonBuilder,
   ButtonStyle
 } = require('discord.js');
-const {
-  joinVoiceChannel,
-  createAudioPlayer,
-  createAudioResource,
-  AudioPlayerStatus,
-  getVoiceConnection
-} = require('@discordjs/voice');
 const { startTwitchWatcher } = require('./twitch-alerts');
-
-// yt-dlp est téléchargé par scripts/download-yt-dlp.js (lancé automatiquement
-// via "postinstall"). On l'utilise en sous-processus plutôt qu'une lib Node
-// (play-dl, ytdl-core...) car YouTube bloque désormais ces libs non maintenues ;
-// yt-dlp reçoit des correctifs en continu pour contourner ces blocages.
-const YTDLP_PATH = path.join(
-  __dirname,
-  '..',
-  'bin',
-  process.platform === 'win32' ? 'yt-dlp.exe' : process.platform === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp_linux'
-);
-
-// YouTube bloque plus agressivement les IPs des hébergeurs cloud (Render, AWS...)
-// que les IPs résidentielles ("Sign in to confirm you're not a bot"). YOUTUBE_COOKIES
-// (contenu d'un cookies.txt exporté d'un compte connecté) permet à yt-dlp de
-// s'authentifier et de contourner ce blocage. Optionnelle : sans elle, /play
-// risque d'échouer une fois déployé même s'il fonctionne en local.
-const COOKIES_PATH = (() => {
-  if (!process.env.YOUTUBE_COOKIES) {
-    console.warn(
-      "YOUTUBE_COOKIES n'est pas définie : /play risque d'échouer si YouTube bloque les requêtes du serveur."
-    );
-    return null;
-  }
-
-  const filePath = path.join(os.tmpdir(), 'youtube-cookies.txt');
-  fs.writeFileSync(filePath, process.env.YOUTUBE_COOKIES);
-  return filePath;
-})();
-
-// Avec des cookies, YouTube sert des URLs de flux signées qui nécessitent de
-// résoudre un challenge JS ("n challenge"). yt-dlp embarque le nécessaire pour
-// ça (EJS) mais a besoin d'un runtime JS pour l'exécuter : on lui fait utiliser
-// Node (déjà présent, pas besoin d'installer Deno séparément sur le serveur).
-function buildArgs(args) {
-  const withRuntime = [...args, '--js-runtimes', 'node'];
-  return COOKIES_PATH ? [...withRuntime, '--cookies', COOKIES_PATH] : withRuntime;
-}
-
-function resolveTrack(query) {
-  return new Promise((resolve, reject) => {
-    const isUrl = /^https?:\/\//i.test(query);
-    const target = isUrl ? query : `ytsearch1:${query}`;
-    const proc = spawn(YTDLP_PATH, buildArgs(['--dump-json', '--no-playlist', '--no-warnings', target]));
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (chunk) => { stdout += chunk; });
-    proc.stderr.on('data', (chunk) => { stderr += chunk; });
-
-    proc.on('error', reject);
-    proc.on('close', (code) => {
-      if (code !== 0 || !stdout.trim()) {
-        reject(new Error(stderr.trim() || `yt-dlp a quitté avec le code ${code}`));
-        return;
-      }
-
-      try {
-        const data = JSON.parse(stdout.trim().split('\n')[0]);
-        resolve({ url: data.webpage_url, title: data.title });
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-}
-
-function createYtdlpAudioStream(url) {
-  const proc = spawn(
-    YTDLP_PATH,
-    buildArgs(['-f', 'bestaudio/best', '--no-playlist', '--no-warnings', '-o', '-', url])
-  );
-
-  // On consomme stderr sans le logger en continu (progression du téléchargement)
-  // pour éviter que le buffer ne sature et ne bloque le process.
-  proc.stderr.resume();
-  proc.on('error', (error) => console.error('Erreur du process yt-dlp :', error.message));
-
-  return proc;
-}
 
 // Variables obligatoires : le bot ne démarre pas si l'une d'elles manque,
 // plutôt que de planter plus tard avec une erreur obscure.
@@ -126,8 +34,7 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildModeration,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.GuildModeration
   ]
 });
 
@@ -207,76 +114,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.commandName === 'hello') {
       await interaction.reply(`Salut ${interaction.user} !`);
-      return;
-    }
-
-    if (interaction.commandName === 'play') {
-      const query = interaction.options.getString('recherche');
-      const voiceChannel = interaction.member.voice.channel;
-
-      if (!voiceChannel) {
-        await interaction.reply({
-          content: 'Tu dois être dans un salon vocal pour utiliser cette commande.',
-          ephemeral: true
-        });
-        return;
-      }
-
-      await interaction.deferReply();
-
-      try {
-        const track = await resolveTrack(query);
-
-        const connection = getVoiceConnection(voiceChannel.guild.id)
-          ?? joinVoiceChannel({
-            channelId: voiceChannel.id,
-            guildId: voiceChannel.guild.id,
-            adapterCreator: voiceChannel.guild.voiceAdapterCreator
-          });
-
-        const ytdlpProcess = createYtdlpAudioStream(track.url);
-        const resource = createAudioResource(ytdlpProcess.stdout);
-        const player = createAudioPlayer();
-
-        player.play(resource);
-        connection.subscribe(player);
-
-        const cleanup = () => {
-          if (!ytdlpProcess.killed) {
-            ytdlpProcess.kill();
-          }
-        };
-
-        player.once(AudioPlayerStatus.Idle, () => {
-          cleanup();
-          connection.destroy();
-        });
-
-        player.once('error', (error) => {
-          console.error(`Erreur du lecteur audio : ${error.message}`);
-          cleanup();
-          connection.destroy();
-        });
-
-        await interaction.editReply(`🎵 Lecture de **${track.title}**`);
-      } catch (error) {
-        console.error('Erreur complète /play :', error);
-        await interaction.editReply("Impossible de lire cette musique, désolé 😿");
-      }
-
-      return;
-    }
-
-    if (interaction.commandName === 'leave') {
-      const connection = getVoiceConnection(interaction.guild.id);
-
-      if (!connection) {
-        await interaction.reply({ content: "Je ne suis dans aucun vocal.", ephemeral: true });
-        return;
-      }
-
-      connection.destroy();
-      await interaction.reply('👋 À plus, je quitte le vocal.');
       return;
     }
 

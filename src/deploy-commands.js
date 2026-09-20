@@ -17,19 +17,7 @@ const commands = [
     .setDescription('Le bot te salue.'),
   new SlashCommandBuilder()
     .setName('partycode')
-    .setDescription('Partage un code de groupe Valorant avec un joli formulaire.'),
-  new SlashCommandBuilder()
-    .setName('play')
-    .setDescription('Fait rejoindre ton vocal au bot et joue une musique.')
-    .addStringOption((option) =>
-      option
-        .setName('recherche')
-        .setDescription('Lien YouTube ou nom de la musique à chercher')
-        .setRequired(true)
-    ),
-  new SlashCommandBuilder()
-    .setName('leave')
-    .setDescription('Fait quitter le vocal au bot.')
+    .setDescription('Partage un code de groupe Valorant avec un joli formulaire.')
 ].map((command) => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(token);

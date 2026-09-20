@@ -25,14 +25,24 @@ function initFirebase() {
   }
 
   try {
+    // Tolère plusieurs façons de coller la clé dans une variable d'env :
+    // - encodée en "\n" littéral sur une seule ligne (format d'un .env)
+    // - déjà en vraies nouvelles lignes (collée telle quelle dans un champ multi-ligne)
+    // - entourée de guillemets accidentels
+    let privateKey = FIREBASE_PRIVATE_KEY.trim();
+    if (
+      (privateKey.startsWith('"') && privateKey.endsWith('"')) ||
+      (privateKey.startsWith("'") && privateKey.endsWith("'"))
+    ) {
+      privateKey = privateKey.slice(1, -1);
+    }
+    privateKey = privateKey.replace(/\\n/g, '\n');
+
     const app = initializeApp({
       credential: cert({
         projectId: FIREBASE_PROJECT_ID,
         clientEmail: FIREBASE_CLIENT_EMAIL,
-        // Le fichier JSON de Firebase encode les retours à la ligne de la clé
-        // en "\n" littéral ; .env ne gère pas les vraies nouvelles lignes
-        // proprement, donc on les reconvertit ici.
-        privateKey: FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+        privateKey
       })
     });
 

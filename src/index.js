@@ -180,7 +180,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         await interaction.editReply(`🎵 Lecture de **${info.video_details.title}**`);
       } catch (error) {
-        console.error(`Impossible de lire la vidéo : ${error.message}`);
+        console.error('Erreur complète /play :', error);
         await interaction.editReply("Impossible de lire cette musique, désolé 😿");
       }
 

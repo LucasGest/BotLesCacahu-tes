@@ -36,6 +36,21 @@ if (missingVars.length > 0) {
 
 const token = process.env.DISCORD_TOKEN;
 
+// Sans ça, YouTube bloque souvent les requêtes venant d'IPs d'hébergeurs cloud
+// (comme Render) avec un message "Sign in to confirm you're not a bot".
+// YOUTUBE_COOKIE est optionnelle : sans elle, /play risque de ne pas fonctionner en ligne.
+if (process.env.YOUTUBE_COOKIE) {
+  playdl.setToken({
+    youtube: {
+      cookie: process.env.YOUTUBE_COOKIE
+    }
+  });
+} else {
+  console.warn(
+    "YOUTUBE_COOKIE n'est pas définie : /play risque d'échouer si YouTube bloque les requêtes du serveur."
+  );
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,

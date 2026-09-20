@@ -9,8 +9,18 @@ const {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
-  EmbedBuilder
+  EmbedBuilder,
+  ButtonBuilder,
+  ButtonStyle
 } = require('discord.js');
+const {
+  joinVoiceChannel,
+  createAudioPlayer,
+  createAudioResource,
+  AudioPlayerStatus,
+  getVoiceConnection
+} = require('@discordjs/voice');
+const playdl = require('play-dl');
 const { startTwitchWatcher } = require('./twitch-alerts');
 
 // Variables obligatoires : le bot ne démarre pas si l'une d'elles manque,
@@ -32,7 +42,8 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildModeration
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildVoiceStates
   ]
 });
 
@@ -115,6 +126,76 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
+    if (interaction.commandName === 'play') {
+      const url = interaction.options.getString('lien');
+      const voiceChannel = interaction.member.voice.channel;
+
+      if (!voiceChannel) {
+        await interaction.reply({
+          content: 'Tu dois être dans un salon vocal pour utiliser cette commande.',
+          ephemeral: true
+        });
+        return;
+      }
+
+      const isValidYoutubeLink = (await playdl.validate(url)) === 'yt_video';
+      if (!isValidYoutubeLink) {
+        await interaction.reply({
+          content: "Donne-moi un lien YouTube valide vers une vidéo (pas une playlist).",
+          ephemeral: true
+        });
+        return;
+      }
+
+      await interaction.deferReply();
+
+      try {
+        const connection = getVoiceConnection(voiceChannel.guild.id)
+          ?? joinVoiceChannel({
+            channelId: voiceChannel.id,
+            guildId: voiceChannel.guild.id,
+            adapterCreator: voiceChannel.guild.voiceAdapterCreator
+          });
+
+        const info = await playdl.video_info(url);
+        const stream = await playdl.stream(url);
+        const resource = createAudioResource(stream.stream, { inputType: stream.type });
+        const player = createAudioPlayer();
+
+        player.play(resource);
+        connection.subscribe(player);
+
+        player.once(AudioPlayerStatus.Idle, () => {
+          connection.destroy();
+        });
+
+        player.once('error', (error) => {
+          console.error(`Erreur du lecteur audio : ${error.message}`);
+          connection.destroy();
+        });
+
+        await interaction.editReply(`🎵 Lecture de **${info.video_details.title}**`);
+      } catch (error) {
+        console.error(`Impossible de lire la vidéo : ${error.message}`);
+        await interaction.editReply("Impossible de lire cette vidéo, désolé 😿");
+      }
+
+      return;
+    }
+
+    if (interaction.commandName === 'leave') {
+      const connection = getVoiceConnection(interaction.guild.id);
+
+      if (!connection) {
+        await interaction.reply({ content: "Je ne suis dans aucun vocal.", ephemeral: true });
+        return;
+      }
+
+      connection.destroy();
+      await interaction.reply('👋 À plus, je quitte le vocal.');
+      return;
+    }
+
     if (interaction.commandName === 'partycode') {
       const modal = new ModalBuilder()
         .setCustomId('partycode_modal')
@@ -192,7 +273,25 @@ client.on(Events.InteractionCreate, async (interaction) => {
       })
       .setTimestamp();
 
-    await interaction.reply({ embeds: [embed] });
+    const copyButton = new ButtonBuilder()
+      .setCustomId(`copy_partycode_${code}`)
+      .setLabel('📋 Copier le code')
+      .setStyle(ButtonStyle.Secondary);
+
+    await interaction.reply({
+      embeds: [embed],
+      components: [new ActionRowBuilder().addComponents(copyButton)]
+    });
+    return;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('copy_partycode_')) {
+    const code = interaction.customId.replace('copy_partycode_', '');
+
+    await interaction.reply({
+      content: `\`${code}\``,
+      ephemeral: true
+    });
   }
 });
 

@@ -55,15 +55,20 @@ const COOKIES_PATH = (() => {
   return filePath;
 })();
 
-function withCookies(args) {
-  return COOKIES_PATH ? [...args, '--cookies', COOKIES_PATH] : args;
+// Avec des cookies, YouTube sert des URLs de flux signées qui nécessitent de
+// résoudre un challenge JS ("n challenge"). yt-dlp embarque le nécessaire pour
+// ça (EJS) mais a besoin d'un runtime JS pour l'exécuter : on lui fait utiliser
+// Node (déjà présent, pas besoin d'installer Deno séparément sur le serveur).
+function buildArgs(args) {
+  const withRuntime = [...args, '--js-runtimes', 'node'];
+  return COOKIES_PATH ? [...withRuntime, '--cookies', COOKIES_PATH] : withRuntime;
 }
 
 function resolveTrack(query) {
   return new Promise((resolve, reject) => {
     const isUrl = /^https?:\/\//i.test(query);
     const target = isUrl ? query : `ytsearch1:${query}`;
-    const proc = spawn(YTDLP_PATH, withCookies(['--dump-json', '--no-playlist', '--no-warnings', target]));
+    const proc = spawn(YTDLP_PATH, buildArgs(['--dump-json', '--no-playlist', '--no-warnings', target]));
 
     let stdout = '';
     let stderr = '';
@@ -91,7 +96,7 @@ function resolveTrack(query) {
 function createYtdlpAudioStream(url) {
   const proc = spawn(
     YTDLP_PATH,
-    withCookies(['-f', 'bestaudio/best', '--no-playlist', '--no-warnings', '-o', '-', url])
+    buildArgs(['-f', 'bestaudio/best', '--no-playlist', '--no-warnings', '-o', '-', url])
   );
 
   // On consomme stderr sans le logger en continu (progression du téléchargement)

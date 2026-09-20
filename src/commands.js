@@ -22,5 +22,13 @@ module.exports = [
       { name: 'option5', description: 'Cinquième option (optionnel)', required: false }
     ]
   },
+  {
+    name: 'rank',
+    description: "Affiche ton niveau et ton XP, ou ceux d'un autre membre.",
+    options: [
+      { name: 'membre', description: 'Le membre dont tu veux voir le niveau', required: false, type: 'user' }
+    ]
+  },
+  { name: 'leaderboard', description: 'Affiche le classement des membres les plus actifs.' },
   { name: 'help', description: 'Affiche la liste des commandes disponibles.' }
 ];

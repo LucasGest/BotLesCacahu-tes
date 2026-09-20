@@ -18,7 +18,9 @@ const commands = COMMANDS.map(({ name, description, adminOnly, options }) => {
   }
 
   for (const option of options ?? []) {
-    builder.addStringOption((builtOption) =>
+    const addOption = option.type === 'user' ? 'addUserOption' : 'addStringOption';
+
+    builder[addOption]((builtOption) =>
       builtOption
         .setName(option.name)
         .setDescription(option.description)

@@ -18,6 +18,7 @@ const {
   AttachmentBuilder
 } = require('discord.js');
 const { startTwitchWatcher } = require('./twitch-alerts');
+const { initFirebase, addXp, getRank, getLeaderboard, xpForLevel } = require('./xp');
 const COMMANDS = require('./commands');
 
 // Rôles ayant accès aux salons de tickets, et catégorie où ils sont créés.
@@ -150,6 +151,8 @@ if (missingVars.length > 0) {
 
 const token = process.env.DISCORD_TOKEN;
 
+initFirebase();
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -187,6 +190,16 @@ client.on(Events.MessageCreate, async (message) => {
 
   if (await handleSpamCheck(message)) {
     return;
+  }
+
+  try {
+    const xpResult = await addXp(message.author.id);
+
+    if (xpResult?.leveledUp) {
+      await message.channel.send(`🎉 ${message.author} passe **niveau ${xpResult.level}** !`);
+    }
+  } catch (error) {
+    console.error(`Impossible de mettre à jour l'XP de ${message.author.tag} : ${error.message}`);
   }
 
   const mentionsSomeoneElse = message.mentions.users.some(
@@ -252,6 +265,63 @@ client.on(Events.InteractionCreate, async (interaction) => {
         );
 
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    if (interaction.commandName === 'rank') {
+      const targetUser = interaction.options.getUser('membre') ?? interaction.user;
+      const rank = await getRank(targetUser.id);
+
+      if (!rank) {
+        await interaction.reply({
+          content: "Le système de niveaux n'est pas configuré pour le moment.",
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+
+      const currentLevelXp = xpForLevel(rank.level);
+      const nextLevelXp = xpForLevel(rank.level + 1);
+      const progress = rank.xp - currentLevelXp;
+      const needed = nextLevelXp - currentLevelXp;
+
+      const embed = new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle(`📈 Niveau de ${targetUser.username}`)
+        .addFields(
+          { name: 'Niveau', value: `${rank.level}`, inline: true },
+          { name: 'XP total', value: `${rank.xp}`, inline: true },
+          { name: 'Progression', value: `${progress} / ${needed} XP vers le niveau ${rank.level + 1}` }
+        );
+
+      await interaction.reply({ embeds: [embed] });
+      return;
+    }
+
+    if (interaction.commandName === 'leaderboard') {
+      const top = await getLeaderboard(10);
+
+      if (top.length === 0) {
+        await interaction.reply("Personne n'a encore gagné d'XP.");
+        return;
+      }
+
+      const medals = ['🥇', '🥈', '🥉'];
+      const lines = await Promise.all(
+        top.map(async (entry, i) => {
+          const member = await interaction.guild.members.fetch(entry.userId).catch(() => null);
+          const name = member ? member.user.username : `Utilisateur inconnu (${entry.userId})`;
+          const rankIcon = medals[i] ?? `${i + 1}.`;
+          return `${rankIcon} **${name}** — niveau ${entry.level} (${entry.xp} XP)`;
+        })
+      );
+
+      const embed = new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle('🏆 Classement des membres actifs')
+        .setDescription(lines.join('\n'));
+
+      await interaction.reply({ embeds: [embed] });
       return;
     }
 

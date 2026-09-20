@@ -21,6 +21,7 @@ Copie `.env.example` vers `.env`, puis renseigne :
 - `TWITCH_CLIENT_ID` et `TWITCH_CLIENT_SECRET` : les identifiants d'une application Twitch
 - `TWITCH_USERNAME` : le nom de la chaîne à surveiller, par défaut `Lucanemone`
 - `DISCORD_STREAM_CHANNEL_ID` : l'identifiant du salon Discord pour les alertes
+- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` : identifiants Firebase pour le système de niveaux/XP (optionnel, voir plus bas)
 
 Ne partage jamais le contenu de `.env` et ne publie jamais le token.
 
@@ -52,6 +53,23 @@ Le staff autorisé et le salon d'archives sont actuellement codés en dur dans [
 
 Modifie ces constantes directement dans le code si tes noms de rôles ou ton salon d'archives changent.
 
+## Anti-spam
+
+Si un membre poste le même message 4 fois ou plus en moins de 10 secondes, le bot supprime les doublons et le mute 60 secondes. État gardé en mémoire (pas de configuration nécessaire), voir `SPAM_WINDOW_MS`, `SPAM_THRESHOLD` et `SPAM_TIMEOUT_MS` dans [src/index.js](src/index.js) pour ajuster les seuils.
+
+## Système de niveaux/XP
+
+Chaque message (hors cooldown d'une minute par membre) rapporte entre 15 et 25 XP, stockées dans Firestore. Un message de félicitations est posté en cas de changement de niveau. `/rank` affiche le niveau d'un membre, `/leaderboard` le classement des 10 plus actifs.
+
+Pour l'activer :
+
+1. Crée un projet sur la [console Firebase](https://console.firebase.google.com/) (gratuit).
+2. Active **Firestore Database** (mode production, les règles de sécurité n'ont pas d'importance ici : le bot y accède via un compte de service, pas depuis le navigateur).
+3. **Paramètres du projet > Comptes de service > Générer une nouvelle clé privée** : télécharge le fichier JSON.
+4. Dans ce fichier, reporte `project_id`, `client_email` et `private_key` dans `.env` (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`) et dans les variables d'environnement de Render. La clé privée contient des `\n` littéraux dans le JSON : colle-la telle quelle, sans la reformater.
+
+Sans ces variables, le système de niveaux reste désactivé (log d'avertissement au démarrage) mais le reste du bot fonctionne normalement.
+
 ## Commandes disponibles
 
 | Commande | Description |
@@ -61,6 +79,9 @@ Modifie ces constantes directement dans le code si tes noms de rôles ou ton sal
 | `/help` | Affiche la liste des commandes disponibles. |
 | `/partycode` | Partage un code de groupe Valorant via un formulaire. |
 | `/ticket-setup` | Poste le message d'ouverture de ticket de recrutement (staff uniquement). |
+| `/poll` | Crée un sondage rapide avec jusqu'à 5 options. |
+| `/rank` | Affiche ton niveau et ton XP, ou ceux d'un autre membre. |
+| `/leaderboard` | Affiche le classement des membres les plus actifs. |
 
 La liste ci-dessus est aussi maintenue dans [src/commands.js](src/commands.js), utilisé à la fois pour déployer les commandes et pour `/help`.
 

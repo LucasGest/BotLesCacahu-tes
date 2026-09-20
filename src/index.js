@@ -63,6 +63,48 @@ async function getArchiveChannel(guild) {
   return guild.channels.cache.get(TICKET_ARCHIVE_CHANNEL_ID) ?? guild.channels.fetch(TICKET_ARCHIVE_CHANNEL_ID);
 }
 
+// Anti-spam : mute automatique si un même membre poste le même message
+// plusieurs fois de suite en peu de temps. État en mémoire (pas besoin de
+// survivre à un redémarrage, c'est une fenêtre glissante de quelques secondes).
+const SPAM_WINDOW_MS = 10_000;
+const SPAM_THRESHOLD = 4;
+const SPAM_TIMEOUT_MS = 60_000;
+const recentMessagesByUser = new Map();
+
+async function handleSpamCheck(message) {
+  const now = Date.now();
+  const history = (recentMessagesByUser.get(message.author.id) ?? []).filter(
+    (entry) => now - entry.timestamp < SPAM_WINDOW_MS
+  );
+  history.push({ content: message.content, timestamp: now, message });
+
+  const duplicates = history.filter(
+    (entry) => entry.content.trim() !== '' && entry.content === message.content
+  );
+
+  if (duplicates.length < SPAM_THRESHOLD) {
+    recentMessagesByUser.set(message.author.id, history);
+    return false;
+  }
+
+  recentMessagesByUser.set(message.author.id, []);
+
+  await Promise.all(duplicates.map((entry) => entry.message.delete().catch(() => {})));
+
+  try {
+    if (message.member?.moderatable) {
+      await message.member.timeout(SPAM_TIMEOUT_MS, 'Spam de messages identiques');
+      await message.channel.send(
+        `🔇 ${message.author} a été mute ${SPAM_TIMEOUT_MS / 60_000} min pour spam de messages identiques.`
+      );
+    }
+  } catch (error) {
+    console.error(`Impossible de timeout ${message.author.tag} pour spam : ${error.message}`);
+  }
+
+  return true;
+}
+
 // Récupère l'historique du salon avant sa suppression et le met en forme en
 // texte brut, pour garder une trace des candidatures une fois le ticket fermé.
 async function buildTicketTranscript(channel) {
@@ -143,6 +185,10 @@ client.on(Events.MessageCreate, async (message) => {
     return;
   }
 
+  if (await handleSpamCheck(message)) {
+    return;
+  }
+
   const mentionsSomeoneElse = message.mentions.users.some(
     (user) => user.id !== message.author.id && user.id !== client.user.id
   );
@@ -206,6 +252,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
         );
 
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    if (interaction.commandName === 'poll') {
+      const question = interaction.options.getString('question');
+      const numberEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
+      const options = ['1', '2', '3', '4', '5']
+        .map((n) => interaction.options.getString(`option${n}`))
+        .filter(Boolean);
+
+      const embed = new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle(`📊 ${question}`)
+        .setDescription(options.map((option, i) => `${numberEmojis[i]} ${option}`).join('\n'))
+        .setFooter({ text: `Sondage lancé par ${interaction.user.username}` })
+        .setTimestamp();
+
+      await interaction.reply({ embeds: [embed] });
+      const pollMessage = await interaction.fetchReply();
+
+      for (let i = 0; i < options.length; i++) {
+        await pollMessage.react(numberEmojis[i]);
+      }
+
       return;
     }
 

@@ -1,3 +1,5 @@
+const { EmbedBuilder } = require('discord.js');
+
 const TWITCH_API_URL = 'https://api.twitch.tv/helix';
 const TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
 const POLL_INTERVAL_MS = 60_000;
@@ -78,9 +80,28 @@ function startTwitchWatcher(client) {
         return;
       }
 
-      await channel.send(
-        `🔴 **${stream.user_name} est en live sur Twitch !**\n${stream.title}\nhttps://twitch.tv/${stream.user_login}`
-      );
+      const thumbnailUrl = stream.thumbnail_url
+        .replace('{width}', '1280')
+        .replace('{height}', '720');
+
+      const embed = new EmbedBuilder()
+        .setColor(0x9146ff) // violet Twitch
+        .setAuthor({ name: `${stream.user_name} est en live sur Twitch !` })
+        .setTitle(stream.title)
+        .setURL(`https://twitch.tv/${stream.user_login}`)
+        .addFields(
+          { name: 'Catégorie', value: stream.game_name || 'Non renseignée', inline: true },
+          { name: 'Viewers', value: `${stream.viewer_count}`, inline: true }
+        )
+        // Query de cache-busting : l'URL de miniature Twitch ne change pas de
+        // forme entre deux lives, Discord garderait sinon une image en cache.
+        .setImage(`${thumbnailUrl}?t=${Date.now()}`)
+        .setTimestamp();
+
+      await channel.send({
+        content: `🔴 **${stream.user_name} est en live !** https://twitch.tv/${stream.user_login}`,
+        embeds: [embed]
+      });
       announcedStreamId = stream.id;
     } catch (error) {
       if (error.status === 401) {

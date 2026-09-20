@@ -9,12 +9,21 @@ if (!token || !clientId || !guildId) {
   throw new Error('DISCORD_TOKEN, DISCORD_CLIENT_ID et DISCORD_GUILD_ID sont requis dans .env.');
 }
 
-const commands = COMMANDS.map(({ name, description, adminOnly }) => {
+const commands = COMMANDS.map(({ name, description, adminOnly, options }) => {
   const builder = new SlashCommandBuilder().setName(name).setDescription(description);
 
   if (adminOnly) {
     // Masque la commande dans le picker Discord pour qui n'a pas la permission.
     builder.setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels);
+  }
+
+  for (const option of options ?? []) {
+    builder.addStringOption((builtOption) =>
+      builtOption
+        .setName(option.name)
+        .setDescription(option.description)
+        .setRequired(Boolean(option.required))
+    );
   }
 
   return builder.toJSON();

@@ -10,5 +10,17 @@ module.exports = [
     description: "Poste le message d'ouverture de ticket de recrutement dans ce salon (staff uniquement).",
     adminOnly: true
   },
+  {
+    name: 'poll',
+    description: 'Crée un sondage rapide (jusqu\'à 5 options).',
+    options: [
+      { name: 'question', description: 'La question du sondage', required: true },
+      { name: 'option1', description: 'Première option', required: true },
+      { name: 'option2', description: 'Deuxième option', required: true },
+      { name: 'option3', description: 'Troisième option (optionnel)', required: false },
+      { name: 'option4', description: 'Quatrième option (optionnel)', required: false },
+      { name: 'option5', description: 'Cinquième option (optionnel)', required: false }
+    ]
+  },
   { name: 'help', description: 'Affiche la liste des commandes disponibles.' }
 ];

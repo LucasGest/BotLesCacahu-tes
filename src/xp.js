@@ -1,4 +1,5 @@
-const admin = require('firebase-admin');
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
 // Cooldown en mémoire : évite de gagner de l'XP en spammant, et évite une
 // lecture Firestore à chaque message juste pour vérifier le cooldown.
@@ -24,8 +25,8 @@ function initFirebase() {
   }
 
   try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
+    const app = initializeApp({
+      credential: cert({
         projectId: FIREBASE_PROJECT_ID,
         clientEmail: FIREBASE_CLIENT_EMAIL,
         // Le fichier JSON de Firebase encode les retours à la ligne de la clé
@@ -35,7 +36,7 @@ function initFirebase() {
       })
     });
 
-    db = admin.firestore();
+    db = getFirestore(app);
     console.log('Système de niveaux/XP activé (Firebase).');
   } catch (error) {
     console.error('Impossible d\'initialiser Firebase, le système de niveaux/XP est désactivé :', error.message);

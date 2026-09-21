@@ -11,33 +11,12 @@ const {
   ChannelType,
   AttachmentBuilder
 } = require('discord.js');
+const { STAFF_ROLE_NAMES, findStaffRoles, isStaffMember } = require('../staff');
 
-// Rôles ayant accès aux salons de tickets, et catégorie où ils sont créés.
-// Résolus par nom (pas par ID) pour rester simples à retoucher sans .env.
-const TICKET_STAFF_ROLE_NAMES = [
-  'Recrutement',
-  'Staff de la cacahuète',
-  'Grand Patron de la Cacahuète',
-  'Co-Patron de la Cacahuète'
-];
+// Catégorie et salon d'archives pour les tickets. Les rôles staff sont
+// définis dans src/staff.js (partagés avec la modération).
 const TICKET_CATEGORY_NAME = '🎫 Tickets';
 const TICKET_ARCHIVE_CHANNEL_ID = '1551289156527988817';
-
-// Comparaison normalisée : les accents peuvent être encodés différemment
-// (NFC vs NFD) entre ce fichier et le nom du rôle tel que Discord le
-// renvoie, ce qui fait échouer un === strict sans que rien ne le signale.
-const normalizeName = (value) => value.normalize('NFC').trim().toLowerCase();
-
-function findStaffRoles(guild) {
-  return TICKET_STAFF_ROLE_NAMES
-    .map((name) => guild.roles.cache.find((r) => normalizeName(r.name) === normalizeName(name)))
-    .filter(Boolean);
-}
-
-function isTicketStaff(member) {
-  const staffRoleIds = new Set(findStaffRoles(member.guild).map((role) => role.id));
-  return member.roles.cache.some((role) => staffRoleIds.has(role.id));
-}
 
 async function getOrCreateCategory(guild, name) {
   let category = guild.channels.cache.find(
@@ -175,7 +154,7 @@ async function handleTicketModalSubmit(interaction, client) {
 
     if (staffRoles.length === 0) {
       console.warn(
-        `Aucun des rôles staff (${TICKET_STAFF_ROLE_NAMES.join(', ')}) n'a été trouvé sur ${guild.name}.`
+        `Aucun des rôles staff (${STAFF_ROLE_NAMES.join(', ')}) n'a été trouvé sur ${guild.name}.`
       );
     }
 
@@ -247,7 +226,7 @@ async function handleTicketModalSubmit(interaction, client) {
 }
 
 async function handleClaimTicketButton(interaction) {
-  if (!isTicketStaff(interaction.member)) {
+  if (!isStaffMember(interaction.member)) {
     await interaction.reply({
       content: 'Seul le staff peut prendre en charge un ticket.',
       flags: MessageFlags.Ephemeral
@@ -274,7 +253,7 @@ async function handleClaimTicketButton(interaction) {
 }
 
 async function handleCloseTicketButton(interaction) {
-  if (!isTicketStaff(interaction.member)) {
+  if (!isStaffMember(interaction.member)) {
     await interaction.reply({
       content: 'Seul le staff peut fermer un ticket.',
       flags: MessageFlags.Ephemeral

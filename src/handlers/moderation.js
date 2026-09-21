@@ -1,3 +1,5 @@
+const { isStaffMember } = require('../staff');
+
 // Anti-spam : mute automatique si un même membre poste le même message
 // plusieurs fois de suite en peu de temps. État en mémoire (pas besoin de
 // survivre à un redémarrage, c'est une fenêtre glissante de quelques secondes).
@@ -54,6 +56,10 @@ async function handleMentionModeration(message, client) {
   }
 
   await message.reply('Ferme ton miaw');
+
+  if (message.member && isStaffMember(message.member)) {
+    return;
+  }
 
   try {
     // setMute ne fait rien si le membre n'est pas en vocal, pas besoin de

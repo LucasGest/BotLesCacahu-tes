@@ -159,7 +159,8 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildModeration
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildVoiceStates
   ]
 });
 
@@ -210,13 +211,19 @@ client.on(Events.MessageCreate, async (message) => {
     await message.reply('Ferme ton miaw');
 
     try {
-      // moderatable === false si le bot n'a pas la permission ou si le rôle
-      // de la cible est plus haut que celui du bot : évite un crash inutile.
-      if (message.member?.moderatable) {
-        await message.member.timeout(30_000, 'A mentionné quelqu\'un d\'autre');
+      // setMute ne fait rien si le membre n'est pas en vocal, pas besoin de
+      // vérifier avant : on ne tente que s'il y est.
+      if (message.member?.voice.channel) {
+        await message.member.voice.setMute(true, 'A mentionné quelqu\'un d\'autre');
+
+        setTimeout(() => {
+          message.member.voice.setMute(false, 'Fin du mute automatique').catch((error) => {
+            console.error(`Impossible de démute ${message.author.tag} : ${error.message}`);
+          });
+        }, 30_000);
       }
     } catch (error) {
-      console.error(`Impossible de timeout ${message.author.tag} : ${error.message}`);
+      console.error(`Impossible de mute ${message.author.tag} : ${error.message}`);
     }
   }
 

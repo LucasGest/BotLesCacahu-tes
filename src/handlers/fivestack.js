@@ -1,5 +1,10 @@
 const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
 
+// Salon où poster les annonces (toujours le même, peu importe où la commande
+// est tapée) et rôle à ping pour prévenir les joueurs disponibles.
+const FIVESTACK_CHANNEL_ID = '1539942114660450374';
+const FIVESTACK_ROLE_ID = '1539944509566357557';
+
 // État en mémoire par annonce : pas besoin de survivre à un redémarrage, une
 // annonce de 5-stack n'a de sens que pour la session de jeu en cours.
 const activeStacks = new Map();
@@ -47,6 +52,16 @@ async function handleFivestackCommand(interaction) {
   const rank = interaction.options.getString('rang');
   const note = interaction.options.getString('note');
 
+  const channel = await interaction.client.channels.fetch(FIVESTACK_CHANNEL_ID).catch(() => null);
+
+  if (!channel || !channel.isTextBased()) {
+    await interaction.reply({
+      content: "Le salon des annonces 5-stack est introuvable, préviens un admin.",
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
   const stackId = String(nextStackId++);
   activeStacks.set(stackId, {
     organizerId: interaction.user.id,
@@ -58,9 +73,15 @@ async function handleFivestackCommand(interaction) {
 
   const embed = buildStackEmbed(activeStacks.get(stackId), interaction.user);
 
-  await interaction.reply({
+  const announcement = await channel.send({
+    content: `<@&${FIVESTACK_ROLE_ID}>`,
     embeds: [embed],
     components: [new ActionRowBuilder().addComponents(buildJoinButton(stackId, false))]
+  });
+
+  await interaction.reply({
+    content: `Annonce postée : ${announcement.url}`,
+    flags: MessageFlags.Ephemeral
   });
 }
 

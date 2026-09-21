@@ -11,6 +11,7 @@ const { handleGeneralInteraction, handleChatReaction } = require('./handlers/gen
 const { handlePollInteraction } = require('./handlers/poll');
 const { handlePartycodeInteraction } = require('./handlers/partycode');
 const { handleTicketInteraction } = require('./handlers/tickets');
+const { handleFivestackInteraction } = require('./handlers/fivestack');
 
 // Variables obligatoires : le bot ne démarre pas si l'une d'elles manque,
 // plutôt que de planter plus tard avec une erreur obscure.
@@ -67,6 +68,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (await handlePollInteraction(interaction)) return;
   if (await handlePartycodeInteraction(interaction)) return;
   if (await handleTicketInteraction(interaction, client)) return;
+  if (await handleFivestackInteraction(interaction)) return;
 });
 
 // Filet de sécurité global : une erreur non gérée quelque part ne doit jamais

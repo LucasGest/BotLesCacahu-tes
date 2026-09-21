@@ -30,5 +30,14 @@ module.exports = [
     ]
   },
   { name: 'leaderboard', description: 'Affiche le classement des membres les plus actifs.' },
+  {
+    name: 'fivestack',
+    description: 'Annonce que tu cherches des joueurs pour compléter un 5-stack.',
+    options: [
+      { name: 'places', description: 'Nombre de places restantes (1 à 4)', required: true, type: 'integer', min: 1, max: 4 },
+      { name: 'rang', description: 'Rang recherché (optionnel)', required: false },
+      { name: 'note', description: 'Message additionnel (optionnel)', required: false }
+    ]
+  },
   { name: 'help', description: 'Affiche la liste des commandes disponibles.' }
 ];

@@ -18,14 +18,19 @@ const commands = COMMANDS.map(({ name, description, adminOnly, options }) => {
   }
 
   for (const option of options ?? []) {
-    const addOption = option.type === 'user' ? 'addUserOption' : 'addStringOption';
+    const addOption =
+      option.type === 'user' ? 'addUserOption' : option.type === 'integer' ? 'addIntegerOption' : 'addStringOption';
 
-    builder[addOption]((builtOption) =>
-      builtOption
-        .setName(option.name)
-        .setDescription(option.description)
-        .setRequired(Boolean(option.required))
-    );
+    builder[addOption]((builtOption) => {
+      builtOption.setName(option.name).setDescription(option.description).setRequired(Boolean(option.required));
+
+      if (option.type === 'integer') {
+        if (option.min !== undefined) builtOption.setMinValue(option.min);
+        if (option.max !== undefined) builtOption.setMaxValue(option.max);
+      }
+
+      return builtOption;
+    });
   }
 
   return builder.toJSON();

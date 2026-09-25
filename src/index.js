@@ -43,6 +43,25 @@ client.once(Events.ClientReady, (readyClient) => {
   startTwitchWatcher(client);
 });
 
+// Visibilité sur la santé de la connexion gateway : une déconnexion/reconnexion
+// silencieuse peut faire échouer des interactions ("L'application ne répond
+// plus") sans qu'aucune erreur applicative ne soit loggée ailleurs.
+client.on(Events.ShardDisconnect, (event, shardId) => {
+  console.warn(`Shard ${shardId} déconnecté (code ${event.code}).`);
+});
+
+client.on(Events.ShardReconnecting, (shardId) => {
+  console.warn(`Shard ${shardId} en cours de reconnexion...`);
+});
+
+client.on(Events.ShardResume, (shardId, replayedEvents) => {
+  console.log(`Shard ${shardId} reconnecté (${replayedEvents} événements rejoués).`);
+});
+
+client.on(Events.Error, (error) => {
+  console.error('Erreur du client Discord :', error.message);
+});
+
 client.on(Events.GuildMemberAdd, handleGuildMemberAdd);
 
 client.on(Events.MessageCreate, async (message) => {

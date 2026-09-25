@@ -105,13 +105,16 @@ async function handleWarnCommand(interaction) {
     return;
   }
 
+  // On répond d'abord : Discord n'attend que 3s pour le premier accusé de
+  // réception, et l'envoi du DM (ouverture du canal DM, etc.) peut prendre
+  // plus longtemps que ça, ce qui ferait échouer l'interaction entière.
+  await interaction.reply(`⚠️ **${member.user.tag}** a été averti. Raison : ${reason}`);
+
   // Les DM peuvent être fermés : pas bloquant, l'avertissement reste posté
   // dans le salon dans tous les cas.
   await member
     .send(`⚠️ Tu as reçu un avertissement sur **${interaction.guild.name}**.\nRaison : ${reason}`)
     .catch(() => {});
-
-  await interaction.reply(`⚠️ **${member.user.tag}** a été averti. Raison : ${reason}`);
 }
 
 async function handleClearCommand(interaction) {

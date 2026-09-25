@@ -5,7 +5,7 @@ const { Client, Events, GatewayIntentBits } = require('discord.js');
 const { startTwitchWatcher } = require('./twitch-alerts');
 const { initFirebase } = require('./xp');
 const { handleGuildMemberAdd } = require('./handlers/welcome');
-const { handleSpamCheck, handleMentionModeration } = require('./handlers/moderation');
+const { handleSpamCheck } = require('./handlers/moderation');
 const { handleXpGain, handleLevelingInteraction } = require('./handlers/leveling');
 const { handleGeneralInteraction, handleChatReaction } = require('./handlers/general');
 const { handlePollInteraction } = require('./handlers/poll');
@@ -34,8 +34,7 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildModeration,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.GuildModeration
   ]
 });
 
@@ -56,7 +55,6 @@ client.on(Events.MessageCreate, async (message) => {
   }
 
   await handleXpGain(message);
-  await handleMentionModeration(message, client);
   await handleChatReaction(message);
 });
 

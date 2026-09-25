@@ -1,5 +1,3 @@
-const { isStaffMember } = require('../staff');
-
 // Anti-spam : mute automatique si un même membre poste le même message
 // plusieurs fois de suite en peu de temps. État en mémoire (pas besoin de
 // survivre à un redémarrage, c'est une fenêtre glissante de quelques secondes).
@@ -44,38 +42,4 @@ async function handleSpamCheck(message) {
   return true;
 }
 
-// Mute vocal 30s (pas un timeout complet, ça déconnecterait du vocal) pour
-// qui mentionne quelqu'un d'autre que lui-même ou le bot.
-async function handleMentionModeration(message, client) {
-  const mentionsSomeoneElse = message.mentions.users.some(
-    (user) => user.id !== message.author.id && user.id !== client.user.id
-  );
-
-  if (!mentionsSomeoneElse) {
-    return;
-  }
-
-  await message.reply('Ferme ton miaw');
-
-  if (message.member && isStaffMember(message.member)) {
-    return;
-  }
-
-  try {
-    // setMute ne fait rien si le membre n'est pas en vocal, pas besoin de
-    // vérifier avant : on ne tente que s'il y est.
-    if (message.member?.voice.channel) {
-      await message.member.voice.setMute(true, 'A mentionné quelqu\'un d\'autre');
-
-      setTimeout(() => {
-        message.member.voice.setMute(false, 'Fin du mute automatique').catch((error) => {
-          console.error(`Impossible de démute ${message.author.tag} : ${error.message}`);
-        });
-      }, 30_000);
-    }
-  } catch (error) {
-    console.error(`Impossible de mute ${message.author.tag} : ${error.message}`);
-  }
-}
-
-module.exports = { handleSpamCheck, handleMentionModeration };
+module.exports = { handleSpamCheck };

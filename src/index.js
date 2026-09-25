@@ -5,7 +5,7 @@ const { Client, Events, GatewayIntentBits } = require('discord.js');
 const { startTwitchWatcher } = require('./twitch-alerts');
 const { initFirebase } = require('./xp');
 const { handleGuildMemberAdd } = require('./handlers/welcome');
-const { handleSpamCheck } = require('./handlers/moderation');
+const { handleSpamCheck, handleModerationInteraction } = require('./handlers/moderation');
 const { handleXpGain, handleLevelingInteraction } = require('./handlers/leveling');
 const { handleGeneralInteraction, handleChatReaction } = require('./handlers/general');
 const { handlePollInteraction } = require('./handlers/poll');
@@ -62,6 +62,7 @@ client.on(Events.MessageCreate, async (message) => {
 // arrête la chaîne : un seul module doit répondre à une interaction donnée.
 client.on(Events.InteractionCreate, async (interaction) => {
   if (await handleGeneralInteraction(interaction, client)) return;
+  if (await handleModerationInteraction(interaction)) return;
   if (await handleLevelingInteraction(interaction)) return;
   if (await handlePollInteraction(interaction)) return;
   if (await handlePartycodeInteraction(interaction)) return;

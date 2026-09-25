@@ -9,12 +9,12 @@ if (!token || !clientId || !guildId) {
   throw new Error('DISCORD_TOKEN, DISCORD_CLIENT_ID et DISCORD_GUILD_ID sont requis dans .env.');
 }
 
-const commands = COMMANDS.map(({ name, description, adminOnly, options }) => {
+const commands = COMMANDS.map(({ name, description, defaultPermission, options }) => {
   const builder = new SlashCommandBuilder().setName(name).setDescription(description);
 
-  if (adminOnly) {
+  if (defaultPermission) {
     // Masque la commande dans le picker Discord pour qui n'a pas la permission.
-    builder.setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels);
+    builder.setDefaultMemberPermissions(PermissionFlagsBits[defaultPermission]);
   }
 
   for (const option of options ?? []) {

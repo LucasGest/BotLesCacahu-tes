@@ -1,50 +1,34 @@
-require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
+const { REST, Routes } = require('discord.js');
+const config = require('./config');
 
-const { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const COMMANDS = require('./commands');
+const commands = [];
+const commandsPath = path.join(__dirname, 'commands');
+const commandFolders = fs.readdirSync(commandsPath);
 
-const { DISCORD_TOKEN: token, DISCORD_CLIENT_ID: clientId, DISCORD_GUILD_ID: guildId } = process.env;
+for (const folder of commandFolders) {
+  const folderPath = path.join(commandsPath, folder);
+  const commandFiles = fs.readdirSync(folderPath).filter((file) => file.endsWith('.js'));
 
-if (!token || !clientId || !guildId) {
-  throw new Error('DISCORD_TOKEN, DISCORD_CLIENT_ID et DISCORD_GUILD_ID sont requis dans .env.');
+  for (const file of commandFiles) {
+    const command = require(path.join(folderPath, file));
+
+    if (!command.data) {
+      console.warn(`La commande ${file} n'a pas de "data", ignorée.`);
+      continue;
+    }
+
+    commands.push(command.data.toJSON());
+  }
 }
 
-const commands = COMMANDS.map(({ name, description, defaultPermission, options }) => {
-  const builder = new SlashCommandBuilder().setName(name).setDescription(description);
-
-  if (defaultPermission) {
-    // Masque la commande dans le picker Discord pour qui n'a pas la permission.
-    builder.setDefaultMemberPermissions(PermissionFlagsBits[defaultPermission]);
-  }
-
-  for (const option of options ?? []) {
-    const addOption =
-      option.type === 'user' ? 'addUserOption' : option.type === 'integer' ? 'addIntegerOption' : 'addStringOption';
-
-    builder[addOption]((builtOption) => {
-      builtOption.setName(option.name).setDescription(option.description).setRequired(Boolean(option.required));
-
-      if (option.type === 'integer') {
-        if (option.min !== undefined) builtOption.setMinValue(option.min);
-        if (option.max !== undefined) builtOption.setMaxValue(option.max);
-      }
-
-      return builtOption;
-    });
-  }
-
-  return builder.toJSON();
-});
-
-const rest = new REST({ version: '10' }).setToken(token);
+const rest = new REST({ version: '10' }).setToken(config.token);
 
 (async () => {
-  console.log('Déploiement des commandes slash...');
+  console.log(`Déploiement de ${commands.length} commande(s) slash...`);
 
-  await rest.put(
-    Routes.applicationGuildCommands(clientId, guildId),
-    { body: commands }
-  );
+  await rest.put(Routes.applicationGuildCommands(config.clientId, config.guildId), { body: commands });
 
   console.log('Commandes slash déployées avec succès.');
 })();

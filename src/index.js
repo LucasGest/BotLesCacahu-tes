@@ -1,96 +1,53 @@
-require('dotenv').config();
-
+const fs = require('fs');
+const path = require('path');
 const http = require('http');
-const { Client, Events, GatewayIntentBits } = require('discord.js');
-const { startTwitchWatcher } = require('./twitch-alerts');
-const { initFirebase } = require('./xp');
-const { handleGuildMemberAdd } = require('./handlers/welcome');
-const { handleSpamCheck, handleModerationInteraction } = require('./handlers/moderation');
-const { handleXpGain, handleLevelingInteraction } = require('./handlers/leveling');
-const { handleGeneralInteraction, handleChatReaction } = require('./handlers/general');
-const { handlePollInteraction } = require('./handlers/poll');
-const { handlePartycodeInteraction } = require('./handlers/partycode');
-const { handleTicketInteraction } = require('./handlers/tickets');
-const { handleFivestackInteraction } = require('./handlers/fivestack');
-
-// Variables obligatoires : le bot ne démarre pas si l'une d'elles manque,
-// plutôt que de planter plus tard avec une erreur obscure.
-const REQUIRED_ENV_VARS = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID'];
-const missingVars = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
-
-if (missingVars.length > 0) {
-  throw new Error(
-    `Variables d'environnement manquantes : ${missingVars.join(', ')}. Vérifie ton fichier .env (jamais commité !).`
-  );
-}
-
-const token = process.env.DISCORD_TOKEN;
-
-initFirebase();
+const { Client, Collection, GatewayIntentBits } = require('discord.js');
+const config = require('./config');
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildModeration
-  ]
+  intents: [GatewayIntentBits.Guilds]
 });
 
-client.once(Events.ClientReady, (readyClient) => {
-  console.log(`Connecte en tant que ${readyClient.user.tag}`);
-  startTwitchWatcher(client);
-});
+client.commands = new Collection();
 
-// Visibilité sur la santé de la connexion gateway : une déconnexion/reconnexion
-// silencieuse peut faire échouer des interactions ("L'application ne répond
-// plus") sans qu'aucune erreur applicative ne soit loggée ailleurs.
-client.on(Events.ShardDisconnect, (event, shardId) => {
-  console.warn(`Shard ${shardId} déconnecté (code ${event.code}).`);
-});
+// Charge chaque commande depuis src/commands/<catégorie>/<nom>.js. Chaque
+// fichier doit exporter { data: SlashCommandBuilder, execute(interaction) }.
+const commandsPath = path.join(__dirname, 'commands');
+const commandFolders = fs.readdirSync(commandsPath);
 
-client.on(Events.ShardReconnecting, (shardId) => {
-  console.warn(`Shard ${shardId} en cours de reconnexion...`);
-});
+for (const folder of commandFolders) {
+  const folderPath = path.join(commandsPath, folder);
+  const commandFiles = fs.readdirSync(folderPath).filter((file) => file.endsWith('.js'));
 
-client.on(Events.ShardResume, (shardId, replayedEvents) => {
-  console.log(`Shard ${shardId} reconnecté (${replayedEvents} événements rejoués).`);
-});
+  for (const file of commandFiles) {
+    const command = require(path.join(folderPath, file));
 
-client.on(Events.Error, (error) => {
-  console.error('Erreur du client Discord :', error.message);
-});
+    if (!command.data || !command.execute) {
+      console.warn(`La commande ${file} n'a pas de "data" ou "execute", ignorée.`);
+      continue;
+    }
 
-client.on(Events.GuildMemberAdd, handleGuildMemberAdd);
-
-client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot) {
-    return;
+    client.commands.set(command.data.name, command);
   }
+}
 
-  if (await handleSpamCheck(message)) {
-    return;
+// Charge chaque event depuis src/events/<nom>.js. Chaque fichier doit
+// exporter { name, once?, execute(...args) }.
+const eventsPath = path.join(__dirname, 'events');
+const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
+
+for (const file of eventFiles) {
+  const event = require(path.join(eventsPath, file));
+
+  if (event.once) {
+    client.once(event.name, (...args) => event.execute(...args, client));
+  } else {
+    client.on(event.name, (...args) => event.execute(...args, client));
   }
-
-  await handleXpGain(message);
-  await handleChatReaction(message);
-});
-
-// Chaque handler renvoie true s'il a pris en charge l'interaction, ce qui
-// arrête la chaîne : un seul module doit répondre à une interaction donnée.
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (await handleGeneralInteraction(interaction, client)) return;
-  if (await handleModerationInteraction(interaction)) return;
-  if (await handleLevelingInteraction(interaction)) return;
-  if (await handlePollInteraction(interaction)) return;
-  if (await handlePartycodeInteraction(interaction)) return;
-  if (await handleTicketInteraction(interaction, client)) return;
-  if (await handleFivestackInteraction(interaction)) return;
-});
+}
 
 // Filet de sécurité global : une erreur non gérée quelque part ne doit jamais
-// planter tout le process (déni de service facile sinon), juste être logguée.
+// planter tout le process (déni de service facile sinon), juste être loggée.
 process.on('unhandledRejection', (error) => {
   console.error('Rejet de promesse non géré :', error);
 });
@@ -100,19 +57,17 @@ process.on('uncaughtException', (error) => {
 });
 
 // Serveur HTTP minimal : Render (free tier) exige un port ouvert pour
-// considérer le service "actif", et un outil comme UptimeRobot peut pinguer
-// cette route toutes les X minutes pour empêcher la mise en veille automatique.
-const PORT = process.env.PORT || 3000;
+// considérer le service "actif".
 http
   .createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Les Cacahuètes bot is alive 🥜');
   })
-  .listen(PORT, () => {
-    console.log(`Serveur keep-alive en écoute sur le port ${PORT}.`);
+  .listen(config.port, () => {
+    console.log(`Serveur keep-alive en écoute sur le port ${config.port}.`);
   });
 
-client.login(token).catch((error) => {
+client.login(config.token).catch((error) => {
   // On logge le type d'erreur, jamais le token lui-même.
   console.error(`Échec de connexion à Discord : ${error.message}`);
   process.exit(1);

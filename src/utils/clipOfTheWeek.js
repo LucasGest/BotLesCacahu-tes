@@ -4,7 +4,8 @@ const { getDb } = require('./firebase');
 const { logError } = require('./logger');
 
 const CLIPS_CHANNEL_NAME = 'clips';
-const WINNER_ROLE_NAME = 'Clip de la semaine';
+const WINNER_ROLE_ID = '1553371311747895346';
+const WINNER_ROLE_LABEL = 'Clip de la semaine'; // juste pour les messages/logs
 const ROLE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const TICK_INTERVAL_MS = 60 * 60 * 1000; // toutes les heures
@@ -17,10 +18,6 @@ function normalize(value) {
 
 function findChannelByName(guild, name) {
   return guild.channels.cache.find((c) => normalize(c.name) === normalize(name));
-}
-
-function findRoleByName(guild, name) {
-  return guild.roles.cache.find((r) => normalize(r.name) === normalize(name));
 }
 
 // Clé "année-semaine" volontairement approximative (pas ISO 8601 strict) :
@@ -100,17 +97,17 @@ async function runWeeklyContest(guild) {
     return;
   }
 
-  const role = findRoleByName(guild, WINNER_ROLE_NAME);
+  const role = guild.roles.cache.get(WINNER_ROLE_ID);
 
   if (!role) {
-    await logError('Clip de la semaine', new Error(`Rôle "${WINNER_ROLE_NAME}" introuvable, crée-le sur le serveur`));
+    await logError('Clip de la semaine', new Error(`Rôle ${WINNER_ROLE_ID} introuvable sur ce serveur`));
     return;
   }
 
   if (!canManageRole(guild, role)) {
     await logError(
       'Clip de la semaine',
-      new Error(`Permission ManageRoles manquante, ou "${WINNER_ROLE_NAME}" est au-dessus du rôle du bot`)
+      new Error(`Permission ManageRoles manquante, ou "${WINNER_ROLE_LABEL}" est au-dessus du rôle du bot`)
     );
     return;
   }
@@ -148,7 +145,7 @@ async function checkRoleExpiry(guild) {
     return;
   }
 
-  const role = findRoleByName(guild, WINNER_ROLE_NAME);
+  const role = guild.roles.cache.get(WINNER_ROLE_ID);
   if (role) {
     const holder = await guild.members.fetch(state.currentHolderId).catch(() => null);
     if (holder) {

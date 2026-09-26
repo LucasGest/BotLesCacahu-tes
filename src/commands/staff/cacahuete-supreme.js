@@ -1,8 +1,8 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
 const { isStaffMember } = require('../../utils/permissions');
 
-const SUPREME_ROLE_NAME = 'Cacahuète Suprême';
-const normalize = (value) => value.normalize('NFC').trim().toLowerCase();
+const SUPREME_ROLE_ID = '1539941903397818388';
+const SUPREME_ROLE_LABEL = 'Cacahuète Suprême'; // juste pour les messages affichés
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -31,11 +31,11 @@ module.exports = {
       return;
     }
 
-    const role = interaction.guild.roles.cache.find((r) => normalize(r.name) === normalize(SUPREME_ROLE_NAME));
+    const role = interaction.guild.roles.cache.get(SUPREME_ROLE_ID);
 
     if (!role) {
       await interaction.reply({
-        content: `Le rôle "${SUPREME_ROLE_NAME}" n'existe pas sur ce serveur, crée-le d'abord.`,
+        content: `Le rôle ${SUPREME_ROLE_ID} n'existe pas sur ce serveur.`,
         flags: MessageFlags.Ephemeral
       });
       return;
@@ -58,7 +58,7 @@ module.exports = {
 
       await winner.roles.add(role);
     } catch (error) {
-      console.error(`Impossible d'attribuer le rôle ${SUPREME_ROLE_NAME} :`, error.message);
+      console.error(`Impossible d'attribuer le rôle ${SUPREME_ROLE_LABEL} :`, error.message);
       await interaction.reply({ content: "Erreur lors de l'attribution du rôle.", flags: MessageFlags.Ephemeral });
       return;
     }
@@ -66,7 +66,7 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(0xffd700)
       .setTitle('🏆 Cacahuète Suprême !')
-      .setDescription(`${winner} est couronné(e) **${SUPREME_ROLE_NAME}** ! Félicitations pour la victoire du tournoi 🎉`)
+      .setDescription(`${winner} est couronné(e) **${SUPREME_ROLE_LABEL}** ! Félicitations pour la victoire du tournoi 🎉`)
       .setThumbnail(winner.user.displayAvatarURL())
       .setTimestamp();
 

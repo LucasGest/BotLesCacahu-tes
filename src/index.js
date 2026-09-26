@@ -3,16 +3,25 @@ const path = require('path');
 const http = require('http');
 const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
 const config = require('./config');
+const { initLogger, logError } = require('./utils/logger');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+  // Bloque par défaut les mentions @everyone/@here et de rôles dans TOUT ce
+  // que le bot envoie, même si un futur message construit une string à partir
+  // d'une entrée utilisateur : un membre ne doit jamais pouvoir faire pinguer
+  // tout le serveur via le bot. "users" reste autorisé pour les mentions
+  // directes volontaires (ex: message de bienvenue).
+  allowedMentions: { parse: ['users'], repliedUser: true }
 });
+
+initLogger(client);
 
 // Visibilité sur la connexion gateway : sans ça, une connexion qui reste
 // bloquée (ni prête, ni en erreur) est totalement invisible dans les logs.
-client.on(Events.Error, (error) => console.error('Erreur du client Discord :', error.message));
+client.on(Events.Error, (error) => logError('Client Discord', error));
 client.on(Events.Warn, (message) => console.warn('Avertissement Discord :', message));
-client.on(Events.ShardError, (error, shardId) => console.error(`Erreur du shard ${shardId} :`, error.message));
+client.on(Events.ShardError, (error, shardId) => logError(`Shard ${shardId}`, error));
 client.on(Events.ShardDisconnect, (event, shardId) => console.warn(`Shard ${shardId} déconnecté (code ${event.code}).`));
 client.on(Events.ShardReconnecting, (shardId) => console.warn(`Shard ${shardId} en cours de reconnexion...`));
 client.on(Events.ShardResume, (shardId) => console.log(`Shard ${shardId} reconnecté.`));
@@ -48,21 +57,32 @@ const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.j
 for (const file of eventFiles) {
   const event = require(path.join(eventsPath, file));
 
+  // Une erreur dans un event (ex: guildMemberAdd) ne doit jamais rester
+  // silencieuse ni planter le process : même filet de sécurité que pour les
+  // commandes, juste posé une fois ici plutôt que dans chaque fichier d'event.
+  const wrappedExecute = async (...args) => {
+    try {
+      await event.execute(...args, client);
+    } catch (error) {
+      await logError(`Event ${event.name}`, error);
+    }
+  };
+
   if (event.once) {
-    client.once(event.name, (...args) => event.execute(...args, client));
+    client.once(event.name, wrappedExecute);
   } else {
-    client.on(event.name, (...args) => event.execute(...args, client));
+    client.on(event.name, wrappedExecute);
   }
 }
 
 // Filet de sécurité global : une erreur non gérée quelque part ne doit jamais
 // planter tout le process (déni de service facile sinon), juste être loggée.
 process.on('unhandledRejection', (error) => {
-  console.error('Rejet de promesse non géré :', error);
+  logError('Rejet de promesse non géré', error);
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('Exception non gérée :', error);
+  logError('Exception non gérée', error);
 });
 
 // Serveur HTTP minimal : Render (free tier) exige un port ouvert pour

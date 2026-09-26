@@ -15,5 +15,11 @@ module.exports = {
   token: process.env.DISCORD_TOKEN,
   clientId: process.env.DISCORD_CLIENT_ID,
   guildId: process.env.DISCORD_GUILD_ID,
-  port: process.env.PORT || 3000
+  port: process.env.PORT || 3000,
+  // Tous optionnels : le bot fonctionne sans, juste avec moins de garde-fous.
+  logChannelId: process.env.LOG_CHANNEL_ID || null,
+  staffRoleIds: (process.env.STAFF_ROLE_IDS || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
 };

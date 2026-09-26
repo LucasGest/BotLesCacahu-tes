@@ -1,6 +1,9 @@
 const { Events, MessageFlags } = require('discord.js');
 const config = require('../config');
 const { logError } = require('../utils/logger');
+const { isStaffMember } = require('../utils/permissions');
+
+const COMMANDS_CHANNEL_ID = '1553347106217926676'; // #commande
 
 // Convention pour les customId des boutons/modals liés à une commande :
 // "<nom-de-la-commande>:<action>:<extra...>". On route vers la commande
@@ -36,6 +39,17 @@ module.exports = {
 
     try {
       if (interaction.isChatInputCommand()) {
+        // Les membres non-staff ne peuvent utiliser les commandes que dans le
+        // salon #commande, pour ne pas polluer les autres salons. Le staff
+        // n'est pas soumis à cette restriction.
+        if (interaction.channelId !== COMMANDS_CHANNEL_ID && !isStaffMember(interaction.member)) {
+          await interaction.reply({
+            content: `Les commandes ne s'utilisent que dans <#${COMMANDS_CHANNEL_ID}>.`,
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
         const command = interaction.client.commands.get(interaction.commandName);
 
         if (!command) {

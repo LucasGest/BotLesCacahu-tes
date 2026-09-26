@@ -21,5 +21,10 @@ module.exports = {
   staffRoleIds: (process.env.STAFF_ROLE_IDS || '')
     .split(',')
     .map((id) => id.trim())
-    .filter(Boolean)
+    .filter(Boolean),
+  firebase: {
+    projectId: process.env.FIREBASE_PROJECT_ID || null,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL || null,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY || null
+  }
 };

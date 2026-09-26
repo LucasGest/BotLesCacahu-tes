@@ -4,6 +4,9 @@ const http = require('http');
 const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
 const config = require('./config');
 const { initLogger, logError } = require('./utils/logger');
+const { initFirebase } = require('./utils/firebase');
+
+initFirebase();
 
 const client = new Client({
   intents: [

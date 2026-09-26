@@ -35,7 +35,7 @@ module.exports = {
         return;
       }
 
-      birthdays.setBirthday(interaction.user.id, jour, mois);
+      await birthdays.setBirthday(interaction.user.id, jour, mois);
       await interaction.reply({
         content: `🎂 Anniversaire enregistré : ${jour}/${mois}. On te le souhaitera le jour J !`,
         flags: MessageFlags.Ephemeral
@@ -44,7 +44,7 @@ module.exports = {
     }
 
     if (sub === 'retirer') {
-      birthdays.removeBirthday(interaction.user.id);
+      await birthdays.removeBirthday(interaction.user.id);
       await interaction.reply({ content: 'Anniversaire supprimé.', flags: MessageFlags.Ephemeral });
     }
   }

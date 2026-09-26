@@ -1,46 +1,49 @@
-const fs = require('fs');
-const path = require('path');
+const { getDb } = require('./firebase');
 
-// Stockage fichier simple : suffisant pour cette fonctionnalité, mais perdu à
-// chaque redéploiement sur Render (disque non persistant). À migrer vers une
-// vraie base (ex: Firebase) si les anniversaires doivent survivre à ça.
-const DATA_PATH = path.join(__dirname, '..', '..', 'data', 'birthdays.json');
+const COLLECTION = 'birthdays';
 
-function readAll() {
-  try {
-    return JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
-  } catch {
+async function setBirthday(userId, day, month) {
+  const db = getDb();
+  if (!db) {
+    console.warn('Firestore désactivé : anniversaire non enregistré.');
+    return;
+  }
+
+  await db.collection(COLLECTION).doc(userId).set({ day, month }, { merge: true });
+}
+
+async function removeBirthday(userId) {
+  const db = getDb();
+  if (!db) {
+    return;
+  }
+
+  await db.collection(COLLECTION).doc(userId).delete();
+}
+
+async function getAll() {
+  const db = getDb();
+  if (!db) {
     return {};
   }
-}
 
-function writeAll(data) {
-  fs.mkdirSync(path.dirname(DATA_PATH), { recursive: true });
-  fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), 'utf8');
-}
+  const snapshot = await db.collection(COLLECTION).get();
+  const all = {};
 
-function setBirthday(userId, day, month) {
-  const data = readAll();
-  data[userId] = { day, month, lastAnnouncedYear: data[userId]?.lastAnnouncedYear ?? null };
-  writeAll(data);
-}
-
-function removeBirthday(userId) {
-  const data = readAll();
-  delete data[userId];
-  writeAll(data);
-}
-
-function getAll() {
-  return readAll();
-}
-
-function markAnnounced(userId, year) {
-  const data = readAll();
-  if (data[userId]) {
-    data[userId].lastAnnouncedYear = year;
-    writeAll(data);
+  for (const doc of snapshot.docs) {
+    all[doc.id] = doc.data();
   }
+
+  return all;
+}
+
+async function markAnnounced(userId, year) {
+  const db = getDb();
+  if (!db) {
+    return;
+  }
+
+  await db.collection(COLLECTION).doc(userId).set({ lastAnnouncedYear: year }, { merge: true });
 }
 
 module.exports = { setBirthday, removeBirthday, getAll, markAnnounced };

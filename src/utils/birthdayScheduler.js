@@ -9,7 +9,7 @@ async function checkBirthdays(client) {
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const all = birthdays.getAll();
+  const all = await birthdays.getAll();
   const todayMatches = Object.entries(all).filter(
     ([, data]) => data.day === day && data.month === month && data.lastAnnouncedYear !== year
   );
@@ -27,7 +27,7 @@ async function checkBirthdays(client) {
 
   for (const [userId] of todayMatches) {
     await channel.send(`🎂🥜 Joyeux anniversaire <@${userId}> ! Toute l'équipe des Cacahuètes te souhaite une excellente journée ! 🎉`);
-    birthdays.markAnnounced(userId, year);
+    await birthdays.markAnnounced(userId, year);
   }
 }
 
